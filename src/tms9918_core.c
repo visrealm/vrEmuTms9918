@@ -58,7 +58,7 @@ static vrEmuTms9918aMode tmsMode(VrEmuTms9918a* tms9918a)
     return TMS_MODE_GRAPHICS_II;
   }
 
-  switch (tms9918a->registers[1] & 0x18 >> 3)
+  switch ((tms9918a->registers[1] & 0x18) >> 3)
   {
     case 0:
       return TMS_MODE_GRAPHICS_I;
@@ -168,7 +168,7 @@ static inline vrEmuTms9918aColor tmsBgColor(VrEmuTms9918a* tms9918a)
   * --------------------
   * create a new TMS9918A
   */
-VR_EMU_TMS9918A_DLLEXPORT VrEmuTms9918a* VrEmuTms9918aNew()
+VR_EMU_TMS9918A_DLLEXPORT VrEmuTms9918a* vrEmuTms9918aNew()
 {
   VrEmuTms9918a* tms9918a = (VrEmuTms9918a*)malloc(sizeof(VrEmuTms9918a));
   if (tms9918a != NULL)
@@ -218,7 +218,7 @@ VR_EMU_TMS9918A_DLLEXPORT void vrEmuTms9918aWriteAddr(VrEmuTms9918a* tms9918a, b
     }
     else /* address */
     {
-      tms9918a->currentAddress |= (data & 0x3f) << 8;
+      tms9918a->currentAddress |= ((data & 0x3f) << 8);
     }
     tms9918a->lastMode = 0;
   }
@@ -288,6 +288,8 @@ static void vrEmuTms9918aOutputSprites(VrEmuTms9918a* tms9918a, byte y, byte pix
     {
       vPos -= 256;
     }
+
+    vPos += 1;
 
     int patternRow = y - vPos;
     if (tmsSpriteMag(tms9918a))
@@ -371,8 +373,8 @@ static void vrEmuTms9918aGraphicsIScanLine(VrEmuTms9918a* tms9918a, byte y, byte
 
     byte colorByte = tms9918a->vram[colorBaseAddr + pattern / 8];
 
-    vrEmuTms9918aColor bgColor = (vrEmuTms9918aColor)((colorByte & 0xf0) >> 4);
-    vrEmuTms9918aColor fgColor = (vrEmuTms9918aColor)(colorByte & 0x0f);
+    vrEmuTms9918aColor fgColor = (vrEmuTms9918aColor)((colorByte & 0xf0) >> 4);
+    vrEmuTms9918aColor bgColor = (vrEmuTms9918aColor)(colorByte & 0x0f);
 
     for (int i = 0; i < GRAPHICS_CHAR_WIDTH; ++i)
     {

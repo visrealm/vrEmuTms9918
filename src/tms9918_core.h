@@ -18,7 +18,8 @@
 #elif COMPILING_DLL
 #define VR_EMU_TMS9918A_DLLEXPORT __declspec(dllexport)
 #else
-#define VR_EMU_TMS9918A_DLLEXPORT __declspec(dllimport)
+#define VR_EMU_TMS9918A_DLLEXPORT
+//__declspec(dllimport)
 #endif
 
 #undef byte
