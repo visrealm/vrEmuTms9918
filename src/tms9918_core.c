@@ -20,6 +20,15 @@
 
 #define GRAPHICS_NUM_COLS 32
 #define GRAPHICS_NUM_ROWS 24
+#define GRAPHICS_CHAR_WIDTH 8
+
+#define TEXT_NUM_COLS 32
+#define TEXT_NUM_ROWS 24
+#define TEXT_CHAR_WIDTH 6
+
+#define MAX_SPRITES 32
+#define SPRITE_ATTR_BYTES 4
+#define LAST_SPRITE_VPOS 208
 
 
  /* PRIVATE DATA STRUCTURE
@@ -63,11 +72,21 @@ static vrEmuTms9918aMode tmsMode(VrEmuTms9918a* tms9918a)
   return TMS_MODE_GRAPHICS_I;
 }
 
+/* Function:  tmsDisplayEnabled
+  * --------------------
+  * check BLANK flag
+  */
+static inline int tmsDisplayEnabled(VrEmuTms9918a* tms9918a)
+{
+  return (tms9918a->registers[1] & 0x40) ? 1 : 0;
+}
+
+
 /* Function:  tmsSpriteSize
   * --------------------
   * sprite size (0 = 8x8, 1 = 16x16)
   */
-static int tmsSpriteSize(VrEmuTms9918a* tms9918a)
+static inline int tmsSpriteSize(VrEmuTms9918a* tms9918a)
 {
   return (tms9918a->registers[1] & 0x02) >> 1;
 }
@@ -76,7 +95,7 @@ static int tmsSpriteSize(VrEmuTms9918a* tms9918a)
   * --------------------
   * sprite size (0 = 1x, 1 = 2x)
   */
-static int tmsSpriteMag(VrEmuTms9918a* tms9918a)
+static inline int tmsSpriteMag(VrEmuTms9918a* tms9918a)
 {
   return tms9918a->registers[1] & 0x01;
 }
@@ -85,16 +104,16 @@ static int tmsSpriteMag(VrEmuTms9918a* tms9918a)
   * --------------------
   * name table base address
   */
-static unsigned short tmsNameTableAddr(VrEmuTms9918a* tms9918a)
+static inline unsigned short tmsNameTableAddr(VrEmuTms9918a* tms9918a)
 {
-  return tms9918a->registers[2] << 10;
+  return (tms9918a->registers[2] & 0x0f) << 10;
 }
 
 /* Function:  tmsColorTableAddr
   * --------------------
   * color table base address
   */
-static unsigned short tmsColorTableAddr(VrEmuTms9918a* tms9918a)
+static inline unsigned short tmsColorTableAddr(VrEmuTms9918a* tms9918a)
 {
   return tms9918a->registers[3] << 6;
 }
@@ -103,34 +122,34 @@ static unsigned short tmsColorTableAddr(VrEmuTms9918a* tms9918a)
   * --------------------
   * pattern table base address
   */
-static unsigned short tmsPatternTableAddr(VrEmuTms9918a* tms9918a)
+static inline unsigned short tmsPatternTableAddr(VrEmuTms9918a* tms9918a)
 {
-  return tms9918a->registers[4] << 11;
+  return (tms9918a->registers[4] & 0x07) << 11;
 }
 
 /* Function:  tmsSpriteAttrTableAddr
   * --------------------
   * sprite attribute table base address
   */
-static unsigned short tmsSpriteAttrTableAddr(VrEmuTms9918a* tms9918a)
+static inline unsigned short tmsSpriteAttrTableAddr(VrEmuTms9918a* tms9918a)
 {
-  return tms9918a->registers[5] << 7;
+  return (tms9918a->registers[5] & 0x7f) << 7;
 }
 
 /* Function:  tmsSpritePatternTableAddr
   * --------------------
   * sprite pattern table base address
   */
-static unsigned short tmsSpritePatternTableAddr(VrEmuTms9918a* tms9918a)
+static inline unsigned short tmsSpritePatternTableAddr(VrEmuTms9918a* tms9918a)
 {
-  return tms9918a->registers[6] << 11;
+  return (tms9918a->registers[6] & 0x07) << 11;
 }
 
 /* Function:  tmsFgColor
   * --------------------
   * foreground color
   */
-static vrEmuTms9918aColor tmsFgColor(VrEmuTms9918a* tms9918a)
+static inline vrEmuTms9918aColor tmsFgColor(VrEmuTms9918a* tms9918a)
 {
   return (vrEmuTms9918aColor)((tms9918a->registers[7] & 0xf0) >> 4);
 }
@@ -139,7 +158,7 @@ static vrEmuTms9918aColor tmsFgColor(VrEmuTms9918a* tms9918a)
   * --------------------
   * background color
   */
-static vrEmuTms9918aColor tmsBgColor(VrEmuTms9918a* tms9918a)
+static inline vrEmuTms9918aColor tmsBgColor(VrEmuTms9918a* tms9918a)
 {
   return (vrEmuTms9918aColor)(tms9918a->registers[7] & 0x0f);
 }
@@ -218,7 +237,7 @@ VR_EMU_TMS9918A_DLLEXPORT void vrEmuTms9918aWriteAddr(VrEmuTms9918a* tms9918a, b
  */
 VR_EMU_TMS9918A_DLLEXPORT void vrEmuTms9918aWriteData(VrEmuTms9918a* tms9918a, byte data)
 {
-  tms9918a->vram[tms9918a->currentAddress++] = data;
+  tms9918a->vram[(tms9918a->currentAddress++) & 0x3fff] = data;
   tms9918a->lastMode = 0;
 }
 
@@ -241,60 +260,205 @@ VR_EMU_TMS9918A_DLLEXPORT byte vrEmuTms9918aReadStatus(VrEmuTms9918a* tms9918a)
 VR_EMU_TMS9918A_DLLEXPORT byte vrEmuTms9918aReadData(VrEmuTms9918a* tms9918a)
 {
   tms9918a->lastMode = 0;
-  return tms9918a->vram[tms9918a->currentAddress++];
+  return tms9918a->vram[(tms9918a->currentAddress++) & 0x3fff];
 }
 
 
-vrEmuTms9918aOutputSprites(VrEmuTms9918a* tms9918a, byte y, vrEmuTms9918aColor pixels[TMS9918A_PIXELS_X])
+/* Function:  vrEmuTms9918aOutputSprites
+ * ----------------------------------------
+ * Output Sprites to a scanline
+ */
+static void vrEmuTms9918aOutputSprites(VrEmuTms9918a* tms9918a, byte y, byte pixels[TMS9918A_PIXELS_X])
 {
+  int spriteSizePx = (tmsSpriteSize(tms9918a) ? 16 : 8) * (tmsSpriteMag(tms9918a) ? 2 : 1);
+  unsigned short spriteAttrTableAddr = tmsSpriteAttrTableAddr(tms9918a);
+
+  for (int i = 0; i < MAX_SPRITES; ++i)
+  {
+    int spriteAttrAddr = spriteAttrTableAddr + i * SPRITE_ATTR_BYTES;
+
+    int vPos = tms9918a->vram[spriteAttrAddr];
+
+    /* stop processing when vPos == LAST_SPRITE_VPOS */
+    if (vPos == LAST_SPRITE_VPOS)
+      break;
+
+    /* check if sprite position is in the -31 to 0 range */
+    if (vPos > LAST_SPRITE_VPOS)
+    {
+      vPos -= 256;
+    }
+
+    int patternRow = y - vPos;
+    if (tmsSpriteMag(tms9918a))
+    {
+      patternRow /= 2;
+    }
+
+    /* check if sprite is visible on this line */
+    if (patternRow < 0 || patternRow >= spriteSizePx)
+      continue;
+
+    /* sprite is visible on this line */
+    byte patternName = tms9918a->vram[spriteAttrAddr + 2];
+
+    unsigned short patternOffset = patternName * (tmsSpriteSize(tms9918a) ? 32 : 8) + patternRow;
+
+    int hPos = tms9918a->vram[spriteAttrAddr + 1];
+    if (tms9918a->vram[spriteAttrAddr + 3] & 0x80)  /* check early clock bit */
+    {
+      hPos -= 32;
+    }
+
+    vrEmuTms9918aColor spriteColor = tms9918a->vram[spriteAttrAddr + 3] & 0x0f;
+
+    byte patternByte = tms9918a->vram[patternOffset];
+
+    int screenBit  = 0;
+    int patternBit = 0;
+
+    for (int screenX = hPos; screenX < hPos + spriteSizePx; ++screenX, ++screenBit)
+    {
+      if (screenX >= TMS9918A_PIXELS_X)
+      {
+        break;
+      }
+
+      if (screenX >= 0)
+      {
+        if (patternByte & (0x80 >> patternBit))
+        {
+          pixels[screenX] = spriteColor;
+        }
+      }
+
+      if (!tmsSpriteMag(tms9918a) || (screenBit & 0x01))
+      {
+        ++patternBit;
+        if (patternBit > 7) /* from A -> C or B -> D of large sprite */
+        {
+          patternBit = 0;
+          patternByte = tms9918a->vram[patternOffset + 16];
+        }
+      }
+    }    
+  }
 
 }
 
 
-vrEmuTms9918aGraphicsIScanLine(VrEmuTms9918a* tms9918a, byte y, vrEmuTms9918aColor pixels[TMS9918A_PIXELS_X])
+/* Function:  vrEmuTms9918aGraphicsIScanLine
+ * ----------------------------------------
+ * generate a Graphics I mode scanline
+ */
+static void vrEmuTms9918aGraphicsIScanLine(VrEmuTms9918a* tms9918a, byte y, byte pixels[TMS9918A_PIXELS_X])
 {
   int textRow = y / 8;
   int patternRow = y % 8;
 
   unsigned short namesAddr = tmsNameTableAddr(tms9918a) + textRow * GRAPHICS_NUM_COLS;
 
-  int pixelIndex = 0;
+  unsigned short patternBaseAddr = tmsPatternTableAddr(tms9918a);
+  unsigned short colorBaseAddr = tmsColorTableAddr(tms9918a);
+
+  int pixelIndex = -1;
 
   for (int tileX = 0; tileX < GRAPHICS_NUM_COLS; ++tileX)
   {
     int pattern = tms9918a->vram[namesAddr + tileX];
     
-    byte patternByte = tms9918a->vram[tmsPatternTableAddr(tms9918a) + patternRow];
+    byte patternByte = tms9918a->vram[patternBaseAddr + pattern * 8 + patternRow];
 
-    byte colorByte = tms9918a->vram[tmsColorTableAddr(tms9918a) + pattern / 8];
+    byte colorByte = tms9918a->vram[colorBaseAddr + pattern / 8];
 
     vrEmuTms9918aColor bgColor = (vrEmuTms9918aColor)((colorByte & 0xf0) >> 4);
     vrEmuTms9918aColor fgColor = (vrEmuTms9918aColor)(colorByte & 0x0f);
 
-    pixels[pixelIndex++] = patternByte & 0x80 ? fgColor : bgColor;
-    pixels[pixelIndex++] = patternByte & 0x40 ? fgColor : bgColor;
-    pixels[pixelIndex++] = patternByte & 0x20 ? fgColor : bgColor;
-    pixels[pixelIndex++] = patternByte & 0x10 ? fgColor : bgColor;
-    pixels[pixelIndex++] = patternByte & 0x08 ? fgColor : bgColor;
-    pixels[pixelIndex++] = patternByte & 0x04 ? fgColor : bgColor;
-    pixels[pixelIndex++] = patternByte & 0x02 ? fgColor : bgColor;
-    pixels[pixelIndex++] = patternByte & 0x01 ? fgColor : bgColor;
+    for (int i = 0; i < GRAPHICS_CHAR_WIDTH; ++i)
+    {
+      pixels[++pixelIndex] = (patternByte & 0x80) ? fgColor : bgColor;
+      patternByte <<= 1;
+    }
   }
 
   vrEmuTms9918aOutputSprites(tms9918a, y, pixels);
 }
 
-vrEmuTms9918aGraphicsIIScanLine(VrEmuTms9918a* tms9918a, byte y, vrEmuTms9918aColor pixels[TMS9918A_PIXELS_X])
+/* Function:  vrEmuTms9918aGraphicsIIScanLine
+ * ----------------------------------------
+ * generate a Graphics II mode scanline
+ */
+static void vrEmuTms9918aGraphicsIIScanLine(VrEmuTms9918a* tms9918a, byte y, byte pixels[TMS9918A_PIXELS_X])
 {
+  int textRow = y / 8;
+  int patternRow = y % 8;
 
+  unsigned short namesAddr = tmsNameTableAddr(tms9918a) + textRow * GRAPHICS_NUM_COLS;
+
+  int pageThird = (textRow & 0x18) >> 3; /* which page? 0-2 */
+  int pageOffset = pageThird << 8;       /* offset (0, 256 or 512) */
+
+  unsigned short patternBaseAddr = tmsPatternTableAddr(tms9918a) + pageOffset;
+  unsigned short colorBaseAddr = tmsColorTableAddr(tms9918a) + pageOffset;
+
+  int pixelIndex = -1;
+
+  for (int tileX = 0; tileX < GRAPHICS_NUM_COLS; ++tileX)
+  {
+    int pattern = tms9918a->vram[namesAddr + tileX];
+
+    byte patternByte = tms9918a->vram[patternBaseAddr + pattern * 8 + patternRow];
+    byte colorByte = tms9918a->vram[colorBaseAddr + pattern * 8 + patternRow];
+
+    vrEmuTms9918aColor bgColor = (vrEmuTms9918aColor)((colorByte & 0xf0) >> 4);
+    vrEmuTms9918aColor fgColor = (vrEmuTms9918aColor)(colorByte & 0x0f);
+
+    for (int i = 0; i < GRAPHICS_CHAR_WIDTH; ++i)
+    {
+      pixels[++pixelIndex] = (patternByte & 0x80) ? fgColor : bgColor;
+      patternByte <<= 1;
+    }
+  }
+
+  vrEmuTms9918aOutputSprites(tms9918a, y, pixels);
 }
 
-vrEmuTms9918aTextScanLine(VrEmuTms9918a* tms9918a, byte y, vrEmuTms9918aColor pixels[TMS9918A_PIXELS_X])
+/* Function:  vrEmuTms9918aTextScanLine
+ * ----------------------------------------
+ * generate a Text mode scanline
+ */
+static void vrEmuTms9918aTextScanLine(VrEmuTms9918a* tms9918a, byte y, byte pixels[TMS9918A_PIXELS_X])
 {
+  int textRow = y / 8;
+  int patternRow = y % 8;
 
+  unsigned short namesAddr = tmsNameTableAddr(tms9918a) + textRow * TEXT_NUM_COLS;
+
+  vrEmuTms9918aColor bgColor = tmsBgColor(tms9918a);
+  vrEmuTms9918aColor fgColor = tmsFgColor(tms9918a);
+
+  int pixelIndex = -1;
+  for (int tileX = 0; tileX < TEXT_NUM_COLS; ++tileX)
+  {
+    int pattern = tms9918a->vram[namesAddr + tileX];
+
+    byte patternByte = tms9918a->vram[tmsPatternTableAddr(tms9918a) + pattern * 8 + patternRow];
+
+    byte colorByte = tms9918a->vram[tmsColorTableAddr(tms9918a) + pattern / 8];
+
+    for (int i = 0; i < TEXT_CHAR_WIDTH; ++i)
+    {
+      pixels[++pixelIndex] = (patternByte & 0x80) ? fgColor : bgColor;
+      patternByte <<= 1;
+    }
+  }
 }
 
-vrEmuTms9918aMulticolorScanLine(VrEmuTms9918a* tms9918a, byte y, vrEmuTms9918aColor pixels[TMS9918A_PIXELS_X])
+/* Function:  vrEmuTms9918aMulticolorScanLine
+ * ----------------------------------------
+ * generate a Multicolor mode scanline
+ */
+static void vrEmuTms9918aMulticolorScanLine(VrEmuTms9918a* tms9918a, byte y, byte pixels[TMS9918A_PIXELS_X])
 {
 
 }
@@ -304,8 +468,23 @@ vrEmuTms9918aMulticolorScanLine(VrEmuTms9918a* tms9918a, byte y, vrEmuTms9918aCo
  * ----------------------------------------
  * generate a scanline
  */
-VR_EMU_TMS9918A_DLLEXPORT void vrEmuTms9918aScanLine(VrEmuTms9918a* tms9918a, byte y, vrEmuTms9918aColor pixels[TMS9918A_PIXELS_X])
+VR_EMU_TMS9918A_DLLEXPORT void vrEmuTms9918aScanLine(VrEmuTms9918a* tms9918a, byte y, byte pixels[TMS9918A_PIXELS_X])
 {
+  if (tms9918a == NULL)
+    return;
+
+  if (!tmsDisplayEnabled(tms9918a))
+  {
+    memset(pixels, TMS_BLACK, TMS9918A_PIXELS_X);
+    return;
+  }
+
+  if (y >= TMS9918A_PIXELS_Y)
+  {
+    memset(pixels, tmsBgColor(tms9918a), TMS9918A_PIXELS_X);
+    return;
+  }
+
   switch (tms9918a->mode)
   {
     case TMS_MODE_GRAPHICS_I:

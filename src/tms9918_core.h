@@ -118,8 +118,10 @@ byte vrEmuTms9918aReadData(VrEmuTms9918a* tms9918a);
 /* Function:  vrEmuTms9918aScanLine
  * ----------------------------------------
  * generate a scanline
+ *
+ * pixels to be filled with TMS9918 color palette indexes (vrEmuTms9918aColor)
  */
 VR_EMU_TMS9918A_DLLEXPORT
-void vrEmuTms9918aScanLine(VrEmuTms9918a* tms9918a, byte y, vrEmuTms9918aColor pixels[TMS9918A_PIXELS_X]);
+void vrEmuTms9918aScanLine(VrEmuTms9918a* tms9918a, byte y, byte pixels[TMS9918A_PIXELS_X]);
 
 #endif // _VR_EMU_TMS9918A_CORE_H_
