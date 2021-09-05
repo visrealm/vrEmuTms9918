@@ -176,6 +176,8 @@ VR_EMU_TMS9918A_DLLEXPORT VrEmuTms9918a* vrEmuTms9918aNew()
     /* initialization */
     tms9918a->currentAddress = 0;
     tms9918a->lastMode = 0;
+    memset(tms9918a->registers, 0, sizeof(tms9918a->registers));
+    memset(tms9918a->vram, 85, sizeof(tms9918a->vram));
   }
 
   return tms9918a;
@@ -305,7 +307,7 @@ static void vrEmuTms9918aOutputSprites(VrEmuTms9918a* tms9918a, byte y, byte pix
     /* sprite is visible on this line */
     byte patternName = tms9918a->vram[spriteAttrAddr + 2];
 
-    unsigned short patternOffset = patternName * (tmsSpriteSize(tms9918a) ? 32 : 8) + patternRow;
+    unsigned short patternOffset = patternName * 8 + patternRow;
 
     int hPos = tms9918a->vram[spriteAttrAddr + 1];
     if (tms9918a->vram[spriteAttrAddr + 3] & 0x80)  /* check early clock bit */
