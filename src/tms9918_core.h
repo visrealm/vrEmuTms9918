@@ -125,4 +125,11 @@ byte vrEmuTms9918aReadData(VrEmuTms9918a* tms9918a);
 VR_EMU_TMS9918A_DLLEXPORT
 void vrEmuTms9918aScanLine(VrEmuTms9918a* tms9918a, byte y, byte pixels[TMS9918A_PIXELS_X]);
 
+/* Function:  vrEmuTms9918aRegValue
+ * ----------------------------------------
+ * return a reigister value
+ */
+VR_EMU_TMS9918A_DLLEXPORT
+byte vrEmuTms9918aRegValue(VrEmuTms9918a* tms9918a, byte reg);
+
 #endif // _VR_EMU_TMS9918A_CORE_H_

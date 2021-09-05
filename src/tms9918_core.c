@@ -28,7 +28,7 @@
 
 #define MAX_SPRITES 32
 #define SPRITE_ATTR_BYTES 4
-#define LAST_SPRITE_VPOS 208
+#define LAST_SPRITE_VPOS 0xD0
 
 
  /* PRIVATE DATA STRUCTURE
@@ -238,7 +238,6 @@ VR_EMU_TMS9918A_DLLEXPORT void vrEmuTms9918aWriteAddr(VrEmuTms9918a* tms9918a, b
 VR_EMU_TMS9918A_DLLEXPORT void vrEmuTms9918aWriteData(VrEmuTms9918a* tms9918a, byte data)
 {
   tms9918a->vram[(tms9918a->currentAddress++) & 0x3fff] = data;
-  tms9918a->lastMode = 0;
 }
 
 /* Function:  vrEmuTms9918aReadStatus
@@ -247,7 +246,6 @@ VR_EMU_TMS9918A_DLLEXPORT void vrEmuTms9918aWriteData(VrEmuTms9918a* tms9918a, b
  */
 VR_EMU_TMS9918A_DLLEXPORT byte vrEmuTms9918aReadStatus(VrEmuTms9918a* tms9918a)
 {
-  tms9918a->lastMode = 0;
   return 0;
 }
 
@@ -259,7 +257,6 @@ VR_EMU_TMS9918A_DLLEXPORT byte vrEmuTms9918aReadStatus(VrEmuTms9918a* tms9918a)
  */
 VR_EMU_TMS9918A_DLLEXPORT byte vrEmuTms9918aReadData(VrEmuTms9918a* tms9918a)
 {
-  tms9918a->lastMode = 0;
   return tms9918a->vram[(tms9918a->currentAddress++) & 0x3fff];
 }
 
@@ -284,7 +281,7 @@ static void vrEmuTms9918aOutputSprites(VrEmuTms9918a* tms9918a, byte y, byte pix
       break;
 
     /* check if sprite position is in the -31 to 0 range */
-    if (vPos > LAST_SPRITE_VPOS)
+    if (vPos > (byte)-32)
     {
       vPos -= 256;
     }
@@ -298,7 +295,11 @@ static void vrEmuTms9918aOutputSprites(VrEmuTms9918a* tms9918a, byte y, byte pix
     }
 
     /* check if sprite is visible on this line */
-    if (patternRow < 0 || patternRow >= spriteSizePx)
+    if (patternRow < 0 || patternRow >= (tmsSpriteSize(tms9918a) ? 16 : 8))
+      continue;
+
+    vrEmuTms9918aColor spriteColor = tms9918a->vram[spriteAttrAddr + 3] & 0x0f;
+    if (spriteColor == TMS_TRANSPARENT)
       continue;
 
     /* sprite is visible on this line */
@@ -312,14 +313,12 @@ static void vrEmuTms9918aOutputSprites(VrEmuTms9918a* tms9918a, byte y, byte pix
       hPos -= 32;
     }
 
-    vrEmuTms9918aColor spriteColor = tms9918a->vram[spriteAttrAddr + 3] & 0x0f;
-
     byte patternByte = tms9918a->vram[patternOffset];
 
     int screenBit  = 0;
     int patternBit = 0;
 
-    for (int screenX = hPos; screenX < hPos + spriteSizePx; ++screenX, ++screenBit)
+    for (int screenX = hPos; screenX < (hPos + spriteSizePx); ++screenX, ++screenBit)
     {
       if (screenX >= TMS9918A_PIXELS_X)
       {
@@ -336,8 +335,7 @@ static void vrEmuTms9918aOutputSprites(VrEmuTms9918a* tms9918a, byte y, byte pix
 
       if (!tmsSpriteMag(tms9918a) || (screenBit & 0x01))
       {
-        ++patternBit;
-        if (patternBit > 7) /* from A -> C or B -> D of large sprite */
+        if (++patternBit == 8) /* from A -> C or B -> D of large sprite */
         {
           patternBit = 0;
           patternByte = tms9918a->vram[patternOffset + 16];
@@ -506,4 +504,15 @@ VR_EMU_TMS9918A_DLLEXPORT void vrEmuTms9918aScanLine(VrEmuTms9918a* tms9918a, by
       break;
   }
 }
+
+/* Function:  vrEmuTms9918aRegValue
+ * ----------------------------------------
+ * return a reigister value
+ */
+VR_EMU_TMS9918A_DLLEXPORT
+byte vrEmuTms9918aRegValue(VrEmuTms9918a * tms9918a, byte reg)
+{
+  return tms9918a->registers[reg & 0x0f];
+}
+
 
