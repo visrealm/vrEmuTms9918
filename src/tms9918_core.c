@@ -183,8 +183,6 @@ VR_EMU_TMS9918A_DLLEXPORT VrEmuTms9918a* vrEmuTms9918aNew()
   return tms9918a;
 }
 
-
-
 /* Function:  vrEmuTms9918aDestroy
  * --------------------
  * destroy a TMS9918A
@@ -515,6 +513,16 @@ VR_EMU_TMS9918A_DLLEXPORT
 byte vrEmuTms9918aRegValue(VrEmuTms9918a * tms9918a, byte reg)
 {
   return tms9918a->registers[reg & 0x07];
+}
+
+/* Function:  vrEmuTms9918aVramValue
+ * ----------------------------------------
+ * return a value from vram
+ */
+VR_EMU_TMS9918A_DLLEXPORT
+byte vrEmuTms9918aVramValue(VrEmuTms9918a* tms9918a, unsigned short addr)
+{
+  return tms9918a->vram[addr & 0x3fff];
 }
 
 

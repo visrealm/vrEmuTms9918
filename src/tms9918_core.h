@@ -132,4 +132,11 @@ void vrEmuTms9918aScanLine(VrEmuTms9918a* tms9918a, byte y, byte pixels[TMS9918A
 VR_EMU_TMS9918A_DLLEXPORT
 byte vrEmuTms9918aRegValue(VrEmuTms9918a* tms9918a, byte reg);
 
+/* Function:  vrEmuTms9918aVramValue
+ * ----------------------------------------
+ * return a value from vram
+ */
+VR_EMU_TMS9918A_DLLEXPORT
+byte vrEmuTms9918aVramValue(VrEmuTms9918a* tms9918a, unsigned short addr);
+
 #endif // _VR_EMU_TMS9918A_CORE_H_
