@@ -22,7 +22,7 @@
 #define GRAPHICS_NUM_ROWS 24
 #define GRAPHICS_CHAR_WIDTH 8
 
-#define TEXT_NUM_COLS 32
+#define TEXT_NUM_COLS 40
 #define TEXT_NUM_ROWS 24
 #define TEXT_CHAR_WIDTH 6
 
@@ -269,6 +269,7 @@ static void vrEmuTms9918aOutputSprites(VrEmuTms9918a* tms9918a, byte y, byte pix
 {
   int spriteSizePx = (tmsSpriteSize(tms9918a) ? 16 : 8) * (tmsSpriteMag(tms9918a) ? 2 : 1);
   unsigned short spriteAttrTableAddr = tmsSpriteAttrTableAddr(tms9918a);
+  unsigned short spritePatternAddr = tmsSpritePatternTableAddr(tms9918a);
 
   for (int i = 0; i < MAX_SPRITES; ++i)
   {
@@ -338,7 +339,7 @@ static void vrEmuTms9918aOutputSprites(VrEmuTms9918a* tms9918a, byte y, byte pix
         if (++patternBit == 8) /* from A -> C or B -> D of large sprite */
         {
           patternBit = 0;
-          patternByte = tms9918a->vram[patternOffset + 16];
+          patternByte = tms9918a->vram[spritePatternAddr+patternOffset + 16];
         }
       }
     }    
@@ -396,7 +397,7 @@ static void vrEmuTms9918aGraphicsIIScanLine(VrEmuTms9918a* tms9918a, byte y, byt
   unsigned short namesAddr = tmsNameTableAddr(tms9918a) + textRow * GRAPHICS_NUM_COLS;
 
   int pageThird = (textRow & 0x18) >> 3; /* which page? 0-2 */
-  int pageOffset = pageThird << 8;       /* offset (0, 256 or 512) */
+  int pageOffset = pageThird << 11;       /* offset (0, 0x800 or 0x1000) */
 
   unsigned short patternBaseAddr = tmsPatternTableAddr(tms9918a) + pageOffset;
   unsigned short colorBaseAddr = tmsColorTableAddr(tms9918a) + pageOffset;
@@ -410,8 +411,8 @@ static void vrEmuTms9918aGraphicsIIScanLine(VrEmuTms9918a* tms9918a, byte y, byt
     byte patternByte = tms9918a->vram[patternBaseAddr + pattern * 8 + patternRow];
     byte colorByte = tms9918a->vram[colorBaseAddr + pattern * 8 + patternRow];
 
-    vrEmuTms9918aColor bgColor = (vrEmuTms9918aColor)((colorByte & 0xf0) >> 4);
-    vrEmuTms9918aColor fgColor = (vrEmuTms9918aColor)(colorByte & 0x0f);
+    vrEmuTms9918aColor fgColor = (vrEmuTms9918aColor)((colorByte & 0xf0) >> 4);
+    vrEmuTms9918aColor bgColor = (vrEmuTms9918aColor)(colorByte & 0x0f);
 
     for (int i = 0; i < GRAPHICS_CHAR_WIDTH; ++i)
     {
