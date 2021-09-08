@@ -514,7 +514,7 @@ VR_EMU_TMS9918A_DLLEXPORT void vrEmuTms9918aScanLine(VrEmuTms9918a* tms9918a, by
 VR_EMU_TMS9918A_DLLEXPORT
 byte vrEmuTms9918aRegValue(VrEmuTms9918a * tms9918a, byte reg)
 {
-  return tms9918a->registers[reg & 0x0f];
+  return tms9918a->registers[reg & 0x07];
 }
 
 
