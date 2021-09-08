@@ -269,6 +269,7 @@ static void vrEmuTms9918aOutputSprites(VrEmuTms9918a* tms9918a, byte y, byte pix
 {
   int spriteSizePx = (tmsSpriteSize(tms9918a) ? 16 : 8) * (tmsSpriteMag(tms9918a) ? 2 : 1);
   unsigned short spriteAttrTableAddr = tmsSpriteAttrTableAddr(tms9918a);
+  unsigned short spritePatternAddr = tmsSpritePatternTableAddr(tms9918a);
 
   for (int i = 0; i < MAX_SPRITES; ++i)
   {
@@ -338,7 +339,7 @@ static void vrEmuTms9918aOutputSprites(VrEmuTms9918a* tms9918a, byte y, byte pix
         if (++patternBit == 8) /* from A -> C or B -> D of large sprite */
         {
           patternBit = 0;
-          patternByte = tms9918a->vram[patternOffset + 16];
+          patternByte = tms9918a->vram[spritePatternAddr+patternOffset + 16];
         }
       }
     }    
