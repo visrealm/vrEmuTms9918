@@ -306,7 +306,7 @@ static void vrEmuTms9918aOutputSprites(VrEmuTms9918a* tms9918a, byte y, byte pix
     /* sprite is visible on this line */
     byte patternName = tms9918a->vram[spriteAttrAddr + 2];
 
-    unsigned short patternOffset = patternName * 8 + patternRow;
+    unsigned short patternOffset = spritePatternAddr + patternName * 8 + patternRow;
 
     int hPos = tms9918a->vram[spriteAttrAddr + 1];
     if (tms9918a->vram[spriteAttrAddr + 3] & 0x80)  /* check early clock bit */
@@ -339,7 +339,7 @@ static void vrEmuTms9918aOutputSprites(VrEmuTms9918a* tms9918a, byte y, byte pix
         if (++patternBit == 8) /* from A -> C or B -> D of large sprite */
         {
           patternBit = 0;
-          patternByte = tms9918a->vram[spritePatternAddr+patternOffset + 16];
+          patternByte = tms9918a->vram[patternOffset + 16];
         }
       }
     }    
