@@ -19,3 +19,11 @@ The goal is to emulate all documented modes listed in the [TMS9918A/TMS9928A/TMS
 ## Usage
 
 The core API is used to produce an image one scanline at a time.
+
+## Screenshots:
+
+#### Graphics Mode I Demo
+<img src="res/mode1demo.gif" alt="Graphics Mode I Demo" width="1279px">
+
+#### Graphics Mode II Demo
+<img src="res/mode2demo.gif" alt="Graphics Mode II Demo" width="1279px">
