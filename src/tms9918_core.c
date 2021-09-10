@@ -116,6 +116,8 @@ static inline unsigned short tmsNameTableAddr(VrEmuTms9918a* tms9918a)
   */
 static inline unsigned short tmsColorTableAddr(VrEmuTms9918a* tms9918a)
 {
+  if (tms9918a->mode == TMS_MODE_GRAPHICS_II)
+    return (tms9918a->registers[3] & 0x80) << 6;
   return tms9918a->registers[3] << 6;
 }
 
@@ -125,6 +127,8 @@ static inline unsigned short tmsColorTableAddr(VrEmuTms9918a* tms9918a)
   */
 static inline unsigned short tmsPatternTableAddr(VrEmuTms9918a* tms9918a)
 {
+  if (tms9918a->mode == TMS_MODE_GRAPHICS_II)
+    return (tms9918a->registers[4] & 0x80) << 6;
   return (tms9918a->registers[4] & 0x07) << 11;
 }
 
@@ -509,18 +513,14 @@ static void vrEmuTms9918aMulticolorScanLine(VrEmuTms9918a* tms9918a, byte y, byt
 
   int pixelIndex = -1;
 
-  /* fill the first 8 pixels with bg color */
   for (int tileX = 0; tileX < GRAPHICS_NUM_COLS; ++tileX)
   {
     int pattern = tms9918a->vram[namesAddr + tileX];
 
     byte colorByte = tms9918a->vram[tmsPatternTableAddr(tms9918a) + pattern * 8 + patternRow];
 
-    vrEmuTms9918aColor fgColor = tmsFgColor(tms9918a, colorByte);
-    vrEmuTms9918aColor bgColor = tmsBgColor(tms9918a, colorByte);
-
-    for (int i = 0; i < 4; ++i) pixels[++pixelIndex] = fgColor;
-    for (int i = 0; i < 4; ++i) pixels[++pixelIndex] = bgColor;
+    for (int i = 0; i < 4; ++i) pixels[++pixelIndex] = tmsFgColor(tms9918a, colorByte);
+    for (int i = 0; i < 4; ++i) pixels[++pixelIndex] = tmsBgColor(tms9918a, colorByte);
   }
 
   vrEmuTms9918aOutputSprites(tms9918a, y, pixels);
