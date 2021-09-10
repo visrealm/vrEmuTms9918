@@ -8,7 +8,7 @@ The goal is to emulate all documented modes listed in the [TMS9918A/TMS9928A/TMS
 
 * Graphics I (including sprites)
 * Graphics II (including sprites)
-* Multicolor mode
+* Multicolor mode (including sprites)
 * Text
 
 ## Current limitations
