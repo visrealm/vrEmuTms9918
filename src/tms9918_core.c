@@ -128,7 +128,7 @@ static inline unsigned short tmsColorTableAddr(VrEmuTms9918a* tms9918a)
 static inline unsigned short tmsPatternTableAddr(VrEmuTms9918a* tms9918a)
 {
   if (tms9918a->mode == TMS_MODE_GRAPHICS_II)
-    return (tms9918a->registers[4] & 0x80) << 6;
+    return (tms9918a->registers[4] & 0x04) << 11;
   return (tms9918a->registers[4] & 0x07) << 11;
 }
 
@@ -150,6 +150,15 @@ static inline unsigned short tmsSpritePatternTableAddr(VrEmuTms9918a* tms9918a)
   return (tms9918a->registers[6] & 0x07) << 11;
 }
 
+/* Function:  tmsBgColor
+  * --------------------
+  * background color
+  */
+static inline vrEmuTms9918aColor tmsMainBgColor(VrEmuTms9918a* tms9918a)
+{
+  return (vrEmuTms9918aColor)(tms9918a->registers[7] & 0x0f);
+}
+
 /* Function:  tmsFgColor
   * --------------------
   * foreground color
@@ -158,15 +167,6 @@ static inline vrEmuTms9918aColor tmsMainFgColor(VrEmuTms9918a* tms9918a)
 {
   vrEmuTms9918aColor c = (vrEmuTms9918aColor)(tms9918a->registers[7] >> 4);
   return c == TMS_TRANSPARENT ? tmsMainBgColor(tms9918a) : c;
-}
-
-/* Function:  tmsBgColor
-  * --------------------
-  * background color
-  */
-static inline vrEmuTms9918aColor tmsMainBgColor(VrEmuTms9918a* tms9918a)
-{
-  return (vrEmuTms9918aColor)(tms9918a->registers[7] & 0x0f);
 }
 
 /* Function:  tmsFgColor
