@@ -8,13 +8,12 @@ The goal is to emulate all documented modes listed in the [TMS9918A/TMS9928A/TMS
 
 * Graphics I (including sprites)
 * Graphics II (including sprites)
+* Multicolor mode
 * Text
 
 ## Current limitations
 
-* Multicolor mode is not implemented
 * Sprite collisions not handled
-* Will output more than 4 sprites on a scanline
 
 ## Usage
 
@@ -27,3 +26,9 @@ The core API is used to produce an image one scanline at a time.
 
 #### Graphics Mode II Demo
 <img src="res/mode2demo.gif" alt="Graphics Mode II Demo" width="1279px">
+
+#### Text Mode Demo
+<img src="res/textdemo.gif" alt="Text Mode Demo" width="1279px">
+
+#### Multicolor Mode Demo
+<img src="res/mcdemo.gif" alt="Multicolor Mode Demo" width="1279px">
