@@ -108,12 +108,18 @@ byte vrEmuTms9918aReadStatus(VrEmuTms9918a* tms9918a);
 
 /* Function:  vrEmuTms9918aReadData
  * --------------------
- * write data (mode = 0) to the tms9918a
- *
- * byte: the data (DB0 -> DB7) to send
+ * read data (mode = 0) from the tms9918a
  */
 VR_EMU_TMS9918A_DLLEXPORT
 byte vrEmuTms9918aReadData(VrEmuTms9918a* tms9918a);
+
+/* Function:  vrEmuTms9918aReadDataNoInc
+ * --------------------
+ * read data (mode = 0) from the tms9918a
+ * don't increment the address pointer
+ */
+VR_EMU_TMS9918A_DLLEXPORT
+byte vrEmuTms9918aReadDataNoInc(VrEmuTms9918a* tms9918a);
 
 
 /* Function:  vrEmuTms9918aScanLine
