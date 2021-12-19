@@ -12,14 +12,15 @@
 #ifndef _VR_EMU_TMS9918A_CORE_H_
 #define _VR_EMU_TMS9918A_CORE_H_
 
-#if _EMSCRIPTEN
+#if VR_TMS9918_EMU_COMPILING_DLL
+#define VR_EMU_TMS9918A_DLLEXPORT __declspec(dllexport)
+#elif VR_TMS9918_EMU_STATIC
+#define VR_EMU_TMS9918A_DLLEXPORT extern
+#elif _EMSCRIPTEN
 #include <emscripten.h>
 #define VR_EMU_TMS9918A_DLLEXPORT EMSCRIPTEN_KEEPALIVE
-#elif COMPILING_DLL
-#define VR_EMU_TMS9918A_DLLEXPORT __declspec(dllexport)
 #else
-#define VR_EMU_TMS9918A_DLLEXPORT
-//__declspec(dllimport)
+#define VR_EMU_TMS9918A_DLLEXPORT __declspec(dllimport)
 #endif
 
 #undef byte
