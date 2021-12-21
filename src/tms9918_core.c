@@ -16,8 +16,6 @@
 
 #define VRAM_SIZE (1 << 14) /* 16KB */
 
-#define NUM_REGISTERS 8
-
 #define GRAPHICS_NUM_COLS 32
 #define GRAPHICS_NUM_ROWS 24
 #define GRAPHICS_CHAR_WIDTH 8
@@ -38,7 +36,7 @@ struct vrEmuTMS9918a_s
 {
   byte vram[VRAM_SIZE];
 
-  byte registers[NUM_REGISTERS];
+  byte registers[TMS_NUM_REGISTERS];
 
   byte lastMode;
 
@@ -54,12 +52,12 @@ struct vrEmuTMS9918a_s
   */
 static vrEmuTms9918aMode tmsMode(VrEmuTms9918a* tms9918a)
 {
-  if (tms9918a->registers[0] & 0x02)
+  if (tms9918a->registers[TMS_REG_0] & 0x02)
   {
     return TMS_MODE_GRAPHICS_II;
   }
 
-  switch ((tms9918a->registers[1] & 0x18) >> 3)
+  switch ((tms9918a->registers[TMS_REG_1] & 0x18) >> 3)
   {
     case 0:
       return TMS_MODE_GRAPHICS_I;
@@ -73,15 +71,6 @@ static vrEmuTms9918aMode tmsMode(VrEmuTms9918a* tms9918a)
   return TMS_MODE_GRAPHICS_I;
 }
 
-/* Function:  tmsDisplayEnabled
-  * --------------------
-  * check BLANK flag
-  */
-static inline int tmsDisplayEnabled(VrEmuTms9918a* tms9918a)
-{
-  return (tms9918a->registers[1] & 0x40) ? 1 : 0;
-}
-
 
 /* Function:  tmsSpriteSize
   * --------------------
@@ -89,7 +78,7 @@ static inline int tmsDisplayEnabled(VrEmuTms9918a* tms9918a)
   */
 static inline int tmsSpriteSize(VrEmuTms9918a* tms9918a)
 {
-  return (tms9918a->registers[1] & 0x02) >> 1;
+  return (tms9918a->registers[TMS_REG_1] & 0x02) >> 1;
 }
 
 /* Function:  tmsSpriteMagnification
@@ -98,7 +87,7 @@ static inline int tmsSpriteSize(VrEmuTms9918a* tms9918a)
   */
 static inline int tmsSpriteMag(VrEmuTms9918a* tms9918a)
 {
-  return tms9918a->registers[1] & 0x01;
+  return tms9918a->registers[TMS_REG_1] & 0x01;
 }
 
 /* Function:  tmsNameTableAddr
@@ -107,7 +96,7 @@ static inline int tmsSpriteMag(VrEmuTms9918a* tms9918a)
   */
 static inline unsigned short tmsNameTableAddr(VrEmuTms9918a* tms9918a)
 {
-  return (tms9918a->registers[2] & 0x0f) << 10;
+  return (tms9918a->registers[TMS_REG_2] & 0x0f) << 10;
 }
 
 /* Function:  tmsColorTableAddr
@@ -117,8 +106,8 @@ static inline unsigned short tmsNameTableAddr(VrEmuTms9918a* tms9918a)
 static inline unsigned short tmsColorTableAddr(VrEmuTms9918a* tms9918a)
 {
   if (tms9918a->mode == TMS_MODE_GRAPHICS_II)
-    return (tms9918a->registers[3] & 0x80) << 6;
-  return tms9918a->registers[3] << 6;
+    return (tms9918a->registers[TMS_REG_3] & 0x80) << 6;
+  return tms9918a->registers[TMS_REG_3] << 6;
 }
 
 /* Function:  tmsPatternTableAddr
@@ -128,8 +117,8 @@ static inline unsigned short tmsColorTableAddr(VrEmuTms9918a* tms9918a)
 static inline unsigned short tmsPatternTableAddr(VrEmuTms9918a* tms9918a)
 {
   if (tms9918a->mode == TMS_MODE_GRAPHICS_II)
-    return (tms9918a->registers[4] & 0x04) << 11;
-  return (tms9918a->registers[4] & 0x07) << 11;
+    return (tms9918a->registers[TMS_REG_4] & 0x04) << 11;
+  return (tms9918a->registers[TMS_REG_4] & 0x07) << 11;
 }
 
 /* Function:  tmsSpriteAttrTableAddr
@@ -138,7 +127,7 @@ static inline unsigned short tmsPatternTableAddr(VrEmuTms9918a* tms9918a)
   */
 static inline unsigned short tmsSpriteAttrTableAddr(VrEmuTms9918a* tms9918a)
 {
-  return (tms9918a->registers[5] & 0x7f) << 7;
+  return (tms9918a->registers[TMS_REG_5] & 0x7f) << 7;
 }
 
 /* Function:  tmsSpritePatternTableAddr
@@ -147,7 +136,7 @@ static inline unsigned short tmsSpriteAttrTableAddr(VrEmuTms9918a* tms9918a)
   */
 static inline unsigned short tmsSpritePatternTableAddr(VrEmuTms9918a* tms9918a)
 {
-  return (tms9918a->registers[6] & 0x07) << 11;
+  return (tms9918a->registers[TMS_REG_6] & 0x07) << 11;
 }
 
 /* Function:  tmsBgColor
@@ -156,7 +145,9 @@ static inline unsigned short tmsSpritePatternTableAddr(VrEmuTms9918a* tms9918a)
   */
 static inline vrEmuTms9918aColor tmsMainBgColor(VrEmuTms9918a* tms9918a)
 {
-  return (vrEmuTms9918aColor)(tms9918a->registers[7] & 0x0f);
+  return (vrEmuTms9918aColor)((vrEmuTms9918aDisplayEnabled(tms9918a) 
+            ? tms9918a->registers[TMS_REG_7] 
+            : TMS_BLACK) & 0x0f);
 }
 
 /* Function:  tmsFgColor
@@ -165,7 +156,7 @@ static inline vrEmuTms9918aColor tmsMainBgColor(VrEmuTms9918a* tms9918a)
   */
 static inline vrEmuTms9918aColor tmsMainFgColor(VrEmuTms9918a* tms9918a)
 {
-  vrEmuTms9918aColor c = (vrEmuTms9918aColor)(tms9918a->registers[7] >> 4);
+  vrEmuTms9918aColor c = (vrEmuTms9918aColor)(tms9918a->registers[TMS_REG_7] >> 4);
   return c == TMS_TRANSPARENT ? tmsMainBgColor(tms9918a) : c;
 }
 
@@ -199,15 +190,28 @@ VR_EMU_TMS9918A_DLLEXPORT VrEmuTms9918a* vrEmuTms9918aNew()
   VrEmuTms9918a* tms9918a = (VrEmuTms9918a*)malloc(sizeof(VrEmuTms9918a));
   if (tms9918a != NULL)
   {
+    vrEmuTms9918aReset(tms9918a);
+ }
+
+  return tms9918a;
+}
+
+/* Function:  vrEmuTms9918aReset
+  * --------------------
+  * reset the new TMS9918A
+  */
+VR_EMU_TMS9918A_DLLEXPORT void vrEmuTms9918aReset(VrEmuTms9918a* tms9918a)
+{
+  if (tms9918a)
+  {
     /* initialization */
     tms9918a->currentAddress = 0;
     tms9918a->lastMode = 0;
     memset(tms9918a->registers, 0, sizeof(tms9918a->registers));
-    memset(tms9918a->vram, 85, sizeof(tms9918a->vram));
+    memset(tms9918a->vram, 0xff, sizeof(tms9918a->vram));
   }
-
-  return tms9918a;
 }
+
 
 /* Function:  vrEmuTms9918aDestroy
  * --------------------
@@ -542,13 +546,7 @@ VR_EMU_TMS9918A_DLLEXPORT void vrEmuTms9918aScanLine(VrEmuTms9918a* tms9918a, by
   if (tms9918a == NULL)
     return;
 
-  if (!tmsDisplayEnabled(tms9918a))
-  {
-    memset(pixels, TMS_BLACK, TMS9918A_PIXELS_X);
-    return;
-  }
-
-  if (y >= TMS9918A_PIXELS_Y)
+  if (!vrEmuTms9918aDisplayEnabled(tms9918a) || y >= TMS9918A_PIXELS_Y)
   {
     memset(pixels, tmsMainBgColor(tms9918a), TMS9918A_PIXELS_X);
     return;
@@ -579,8 +577,11 @@ VR_EMU_TMS9918A_DLLEXPORT void vrEmuTms9918aScanLine(VrEmuTms9918a* tms9918a, by
  * return a reigister value
  */
 VR_EMU_TMS9918A_DLLEXPORT
-byte vrEmuTms9918aRegValue(VrEmuTms9918a * tms9918a, byte reg)
+byte vrEmuTms9918aRegValue(VrEmuTms9918a * tms9918a, vrEmuTms9918aRegister reg)
 {
+  if (tms9918a == NULL)
+    return 0;
+
   return tms9918a->registers[reg & 0x07];
 }
 
@@ -591,7 +592,21 @@ byte vrEmuTms9918aRegValue(VrEmuTms9918a * tms9918a, byte reg)
 VR_EMU_TMS9918A_DLLEXPORT
 byte vrEmuTms9918aVramValue(VrEmuTms9918a* tms9918a, unsigned short addr)
 {
+  if (tms9918a == NULL)
+    return 0;
+
   return tms9918a->vram[addr & 0x3fff];
 }
 
+/* Function:  vrEmuTms9918aDisplayEnabled
+  * --------------------
+  * check BLANK flag
+  */
+VR_EMU_TMS9918A_DLLEXPORT
+int vrEmuTms9918aDisplayEnabled(VrEmuTms9918a* tms9918a)
+{
+  if (tms9918a == NULL)
+    return 0;
 
+  return (tms9918a->registers[TMS_REG_1] & 0x40) ? 1 : 0;
+}

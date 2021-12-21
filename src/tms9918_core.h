@@ -59,6 +59,19 @@ typedef enum
   TMS_WHITE,
 } vrEmuTms9918aColor;
 
+typedef enum
+{
+  TMS_REG_0,
+  TMS_REG_1,
+  TMS_REG_2,
+  TMS_REG_3,
+  TMS_REG_4,
+  TMS_REG_5,
+  TMS_REG_6,
+  TMS_REG_7,
+  TMS_NUM_REGISTERS
+} vrEmuTms9918aRegister;
+
 #define TMS9918A_PIXELS_X 256
 #define TMS9918A_PIXELS_Y 192
 
@@ -72,6 +85,13 @@ typedef enum
   */
 VR_EMU_TMS9918A_DLLEXPORT
 VrEmuTms9918a* vrEmuTms9918aNew();
+
+/* Function:  vrEmuTms9918aReset
+  * --------------------
+  * reset the new TMS9918A
+  */
+VR_EMU_TMS9918A_DLLEXPORT
+void vrEmuTms9918aReset(VrEmuTms9918a* tms9918a);
 
 /* Function:  vrEmuTms9918aDestroy
  * --------------------
@@ -137,7 +157,7 @@ void vrEmuTms9918aScanLine(VrEmuTms9918a* tms9918a, byte y, byte pixels[TMS9918A
  * return a reigister value
  */
 VR_EMU_TMS9918A_DLLEXPORT
-byte vrEmuTms9918aRegValue(VrEmuTms9918a* tms9918a, byte reg);
+byte vrEmuTms9918aRegValue(VrEmuTms9918a* tms9918a, vrEmuTms9918aRegister reg);
 
 /* Function:  vrEmuTms9918aVramValue
  * ----------------------------------------
@@ -145,5 +165,14 @@ byte vrEmuTms9918aRegValue(VrEmuTms9918a* tms9918a, byte reg);
  */
 VR_EMU_TMS9918A_DLLEXPORT
 byte vrEmuTms9918aVramValue(VrEmuTms9918a* tms9918a, unsigned short addr);
+
+
+/* Function:  vrEmuTms9918aDisplayEnabled
+  * --------------------
+  * check BLANK flag
+  */
+VR_EMU_TMS9918A_DLLEXPORT
+int vrEmuTms9918aDisplayEnabled(VrEmuTms9918a* tms9918a);
+
 
 #endif // _VR_EMU_TMS9918A_CORE_H_
