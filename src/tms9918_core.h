@@ -16,7 +16,7 @@
 #define VR_EMU_TMS9918A_DLLEXPORT __declspec(dllexport)
 #elif VR_TMS9918_EMU_STATIC
 #define VR_EMU_TMS9918A_DLLEXPORT extern
-#elif _EMSCRIPTEN
+#elif __EMSCRIPTEN__
 #include <emscripten.h>
 #define VR_EMU_TMS9918A_DLLEXPORT EMSCRIPTEN_KEEPALIVE
 #else
