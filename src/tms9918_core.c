@@ -37,19 +37,19 @@
   * ---------------------------------------- */
 struct vrEmuTMS9918a_s
 {
-  byte vram[VRAM_SIZE];
+  uint8_t vram[VRAM_SIZE];
 
-  byte registers[TMS_NUM_REGISTERS];
+  uint8_t registers[TMS_NUM_REGISTERS];
   
-  byte status;
+  uint8_t status;
 
-  byte lastMode;
+  uint8_t lastMode;
 
   unsigned short currentAddress;
 
   vrEmuTms9918aMode mode;
 
-  byte rowSpriteBits[TMS9918A_PIXELS_X];
+  uint8_t rowSpriteBits[TMS9918A_PIXELS_X];
 };
 
 
@@ -171,7 +171,7 @@ static inline vrEmuTms9918aColor tmsMainFgColor(VrEmuTms9918a* tms9918a)
   * --------------------
   * foreground color
   */
-static inline vrEmuTms9918aColor tmsFgColor(VrEmuTms9918a* tms9918a, byte colorByte)
+static inline vrEmuTms9918aColor tmsFgColor(VrEmuTms9918a* tms9918a, uint8_t colorByte)
 {
   vrEmuTms9918aColor c = (vrEmuTms9918aColor)(colorByte >> 4);
   return c == TMS_TRANSPARENT ? tmsMainBgColor(tms9918a) : c;
@@ -181,7 +181,7 @@ static inline vrEmuTms9918aColor tmsFgColor(VrEmuTms9918a* tms9918a, byte colorB
   * --------------------
   * background color
   */
-static inline vrEmuTms9918aColor tmsBgColor(VrEmuTms9918a* tms9918a, byte colorByte)
+static inline vrEmuTms9918aColor tmsBgColor(VrEmuTms9918a* tms9918a, uint8_t colorByte)
 {
   vrEmuTms9918aColor c = (vrEmuTms9918aColor)(colorByte & 0x0f);
   return c == TMS_TRANSPARENT ? tmsMainBgColor(tms9918a) : c;
@@ -240,9 +240,9 @@ VR_EMU_TMS9918A_DLLEXPORT void vrEmuTms9918aDestroy(VrEmuTms9918a* tms9918a)
  * --------------------
  * write an address (mode = 1) to the tms9918a
  *
- * byte: the data (DB0 -> DB7) to send
+ * data: the data (DB0 -> DB7) to send
  */
-VR_EMU_TMS9918A_DLLEXPORT void vrEmuTms9918aWriteAddr(VrEmuTms9918a* tms9918a, byte data)
+VR_EMU_TMS9918A_DLLEXPORT void vrEmuTms9918aWriteAddr(VrEmuTms9918a* tms9918a, uint8_t data)
 {
   if (tms9918a->lastMode)
   {
@@ -271,9 +271,9 @@ VR_EMU_TMS9918A_DLLEXPORT void vrEmuTms9918aWriteAddr(VrEmuTms9918a* tms9918a, b
  * --------------------
  * write data (mode = 0) to the tms9918a
  *
- * byte: the data (DB0 -> DB7) to send
+ * data: the data (DB0 -> DB7) to send
  */
-VR_EMU_TMS9918A_DLLEXPORT void vrEmuTms9918aWriteData(VrEmuTms9918a* tms9918a, byte data)
+VR_EMU_TMS9918A_DLLEXPORT void vrEmuTms9918aWriteData(VrEmuTms9918a* tms9918a, uint8_t data)
 {
   tms9918a->vram[(tms9918a->currentAddress++) & 0x3fff] = data;
 }
@@ -282,9 +282,9 @@ VR_EMU_TMS9918A_DLLEXPORT void vrEmuTms9918aWriteData(VrEmuTms9918a* tms9918a, b
  * --------------------
  * read from the status register
  */
-VR_EMU_TMS9918A_DLLEXPORT byte vrEmuTms9918aReadStatus(VrEmuTms9918a* tms9918a)
+VR_EMU_TMS9918A_DLLEXPORT uint8_t vrEmuTms9918aReadStatus(VrEmuTms9918a* tms9918a)
 {
-  byte tmpStatus = tms9918a->status;
+  uint8_t tmpStatus = tms9918a->status;
   tms9918a->status &= ~(STATUS_INT | STATUS_COL);
   return tmpStatus;
 }
@@ -293,7 +293,7 @@ VR_EMU_TMS9918A_DLLEXPORT byte vrEmuTms9918aReadStatus(VrEmuTms9918a* tms9918a)
  * --------------------
  * read data (mode = 0) from the tms9918a
  */
-VR_EMU_TMS9918A_DLLEXPORT byte vrEmuTms9918aReadData(VrEmuTms9918a* tms9918a)
+VR_EMU_TMS9918A_DLLEXPORT uint8_t vrEmuTms9918aReadData(VrEmuTms9918a* tms9918a)
 {
   return tms9918a->vram[(tms9918a->currentAddress++) & 0x3fff];
 }
@@ -302,7 +302,7 @@ VR_EMU_TMS9918A_DLLEXPORT byte vrEmuTms9918aReadData(VrEmuTms9918a* tms9918a)
  * --------------------
  * read data (mode = 0) from the tms9918a
  */
-VR_EMU_TMS9918A_DLLEXPORT byte vrEmuTms9918aReadDataNoInc(VrEmuTms9918a* tms9918a)
+VR_EMU_TMS9918A_DLLEXPORT uint8_t vrEmuTms9918aReadDataNoInc(VrEmuTms9918a* tms9918a)
 {
   return tms9918a->vram[tms9918a->currentAddress & 0x3fff];
 }
@@ -311,7 +311,7 @@ VR_EMU_TMS9918A_DLLEXPORT byte vrEmuTms9918aReadDataNoInc(VrEmuTms9918a* tms9918
  * ----------------------------------------
  * Output Sprites to a scanline
  */
-static void vrEmuTms9918aOutputSprites(VrEmuTms9918a* tms9918a, byte y, byte pixels[TMS9918A_PIXELS_X])
+static void vrEmuTms9918aOutputSprites(VrEmuTms9918a* tms9918a, uint8_t y, uint8_t pixels[TMS9918A_PIXELS_X])
 {
   int spriteSizePx = (tmsSpriteSize(tms9918a) ? 16 : 8) * (tmsSpriteMag(tms9918a) ? 2 : 1);
   unsigned short spriteAttrTableAddr = tmsSpriteAttrTableAddr(tms9918a);
@@ -341,7 +341,7 @@ static void vrEmuTms9918aOutputSprites(VrEmuTms9918a* tms9918a, byte y, byte pix
     }
 
     /* check if sprite position is in the -31 to 0 range */
-    if (vPos > (byte)-32)
+    if (vPos > (uint8_t)-32)
     {
       vPos -= 256;
     }
@@ -377,7 +377,7 @@ static void vrEmuTms9918aOutputSprites(VrEmuTms9918a* tms9918a, byte y, byte pix
     }
 
     /* sprite is visible on this line */
-    byte patternName = tms9918a->vram[spriteAttrAddr + 2];
+    uint8_t patternName = tms9918a->vram[spriteAttrAddr + 2];
 
     unsigned short patternOffset = spritePatternAddr + patternName * 8 + patternRow;
 
@@ -387,7 +387,7 @@ static void vrEmuTms9918aOutputSprites(VrEmuTms9918a* tms9918a, byte y, byte pix
       hPos -= 32;
     }
 
-    byte patternByte = tms9918a->vram[patternOffset];
+    uint8_t patternByte = tms9918a->vram[patternOffset];
 
     int screenBit  = 0;
     int patternBit = 0;
@@ -435,7 +435,7 @@ static void vrEmuTms9918aOutputSprites(VrEmuTms9918a* tms9918a, byte y, byte pix
  * ----------------------------------------
  * generate a Graphics I mode scanline
  */
-static void vrEmuTms9918aGraphicsIScanLine(VrEmuTms9918a* tms9918a, byte y, byte pixels[TMS9918A_PIXELS_X])
+static void vrEmuTms9918aGraphicsIScanLine(VrEmuTms9918a* tms9918a, uint8_t y, uint8_t pixels[TMS9918A_PIXELS_X])
 {
   int textRow = y / 8;
   int patternRow = y % 8;
@@ -451,9 +451,9 @@ static void vrEmuTms9918aGraphicsIScanLine(VrEmuTms9918a* tms9918a, byte y, byte
   {
     int pattern = tms9918a->vram[namesAddr + tileX];
     
-    byte patternByte = tms9918a->vram[patternBaseAddr + pattern * 8 + patternRow];
+    uint8_t patternByte = tms9918a->vram[patternBaseAddr + pattern * 8 + patternRow];
 
-    byte colorByte = tms9918a->vram[colorBaseAddr + pattern / 8];
+    uint8_t colorByte = tms9918a->vram[colorBaseAddr + pattern / 8];
 
     vrEmuTms9918aColor fgColor = tmsFgColor(tms9918a, colorByte);
     vrEmuTms9918aColor bgColor = tmsBgColor(tms9918a, colorByte);
@@ -472,7 +472,7 @@ static void vrEmuTms9918aGraphicsIScanLine(VrEmuTms9918a* tms9918a, byte y, byte
  * ----------------------------------------
  * generate a Graphics II mode scanline
  */
-static void vrEmuTms9918aGraphicsIIScanLine(VrEmuTms9918a* tms9918a, byte y, byte pixels[TMS9918A_PIXELS_X])
+static void vrEmuTms9918aGraphicsIIScanLine(VrEmuTms9918a* tms9918a, uint8_t y, uint8_t pixels[TMS9918A_PIXELS_X])
 {
   int textRow = y / 8;
   int patternRow = y % 8;
@@ -491,8 +491,8 @@ static void vrEmuTms9918aGraphicsIIScanLine(VrEmuTms9918a* tms9918a, byte y, byt
   {
     int pattern = tms9918a->vram[namesAddr + tileX];
 
-    byte patternByte = tms9918a->vram[patternBaseAddr + pattern * 8 + patternRow];
-    byte colorByte = tms9918a->vram[colorBaseAddr + pattern * 8 + patternRow];
+    uint8_t patternByte = tms9918a->vram[patternBaseAddr + pattern * 8 + patternRow];
+    uint8_t colorByte = tms9918a->vram[colorBaseAddr + pattern * 8 + patternRow];
 
     vrEmuTms9918aColor fgColor = tmsFgColor(tms9918a, colorByte);
     vrEmuTms9918aColor bgColor = tmsBgColor(tms9918a, colorByte);
@@ -511,7 +511,7 @@ static void vrEmuTms9918aGraphicsIIScanLine(VrEmuTms9918a* tms9918a, byte y, byt
  * ----------------------------------------
  * generate a Text mode scanline
  */
-static void vrEmuTms9918aTextScanLine(VrEmuTms9918a* tms9918a, byte y, byte pixels[TMS9918A_PIXELS_X])
+static void vrEmuTms9918aTextScanLine(VrEmuTms9918a* tms9918a, uint8_t y, uint8_t pixels[TMS9918A_PIXELS_X])
 {
   int textRow = y / 8;
   int patternRow = y % 8;
@@ -534,9 +534,9 @@ static void vrEmuTms9918aTextScanLine(VrEmuTms9918a* tms9918a, byte y, byte pixe
   {
     int pattern = tms9918a->vram[namesAddr + tileX];
 
-    byte patternByte = tms9918a->vram[tmsPatternTableAddr(tms9918a) + pattern * 8 + patternRow];
+    uint8_t patternByte = tms9918a->vram[tmsPatternTableAddr(tms9918a) + pattern * 8 + patternRow];
 
-    byte colorByte = tms9918a->vram[tmsColorTableAddr(tms9918a) + pattern / 8];
+    uint8_t colorByte = tms9918a->vram[tmsColorTableAddr(tms9918a) + pattern / 8];
 
     for (int i = 0; i < TEXT_CHAR_WIDTH; ++i)
     {
@@ -555,7 +555,7 @@ static void vrEmuTms9918aTextScanLine(VrEmuTms9918a* tms9918a, byte y, byte pixe
  * ----------------------------------------
  * generate a Multicolor mode scanline
  */
-static void vrEmuTms9918aMulticolorScanLine(VrEmuTms9918a* tms9918a, byte y, byte pixels[TMS9918A_PIXELS_X])
+static void vrEmuTms9918aMulticolorScanLine(VrEmuTms9918a* tms9918a, uint8_t y, uint8_t pixels[TMS9918A_PIXELS_X])
 {
   int textRow = y / 8;
   int patternRow = (y / 4) % 2 + (textRow % 4) * 2;
@@ -568,7 +568,7 @@ static void vrEmuTms9918aMulticolorScanLine(VrEmuTms9918a* tms9918a, byte y, byt
   {
     int pattern = tms9918a->vram[namesAddr + tileX];
 
-    byte colorByte = tms9918a->vram[tmsPatternTableAddr(tms9918a) + pattern * 8 + patternRow];
+    uint8_t colorByte = tms9918a->vram[tmsPatternTableAddr(tms9918a) + pattern * 8 + patternRow];
 
     for (int i = 0; i < 4; ++i) pixels[++pixelIndex] = tmsFgColor(tms9918a, colorByte);
     for (int i = 0; i < 4; ++i) pixels[++pixelIndex] = tmsBgColor(tms9918a, colorByte);
@@ -582,7 +582,7 @@ static void vrEmuTms9918aMulticolorScanLine(VrEmuTms9918a* tms9918a, byte y, byt
  * ----------------------------------------
  * generate a scanline
  */
-VR_EMU_TMS9918A_DLLEXPORT void vrEmuTms9918aScanLine(VrEmuTms9918a* tms9918a, byte y, byte pixels[TMS9918A_PIXELS_X])
+VR_EMU_TMS9918A_DLLEXPORT void vrEmuTms9918aScanLine(VrEmuTms9918a* tms9918a, uint8_t y, uint8_t pixels[TMS9918A_PIXELS_X])
 {
   if (tms9918a == NULL)
     return;
@@ -623,7 +623,7 @@ VR_EMU_TMS9918A_DLLEXPORT void vrEmuTms9918aScanLine(VrEmuTms9918a* tms9918a, by
  * return a reigister value
  */
 VR_EMU_TMS9918A_DLLEXPORT
-byte vrEmuTms9918aRegValue(VrEmuTms9918a * tms9918a, vrEmuTms9918aRegister reg)
+uint8_t vrEmuTms9918aRegValue(VrEmuTms9918a * tms9918a, vrEmuTms9918aRegister reg)
 {
   if (tms9918a == NULL)
     return 0;
@@ -636,7 +636,7 @@ byte vrEmuTms9918aRegValue(VrEmuTms9918a * tms9918a, vrEmuTms9918aRegister reg)
  * return a value from vram
  */
 VR_EMU_TMS9918A_DLLEXPORT
-byte vrEmuTms9918aVramValue(VrEmuTms9918a* tms9918a, unsigned short addr)
+uint8_t vrEmuTms9918aVramValue(VrEmuTms9918a* tms9918a, unsigned short addr)
 {
   if (tms9918a == NULL)
     return 0;

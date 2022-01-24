@@ -23,8 +23,7 @@
 #define VR_EMU_TMS9918A_DLLEXPORT __declspec(dllimport)
 #endif
 
-#undef byte
-typedef unsigned char byte;
+#include <stdint.h>
 
 /* PRIVATE DATA STRUCTURE
  * ---------------------------------------- */
@@ -106,33 +105,33 @@ void vrEmuTms9918aDestroy(VrEmuTms9918a* tms9918a);
  * --------------------
  * write an address (mode = 1) to the tms9918a
  *
- * byte: the data (DB0 -> DB7) to send
+ * uint8_t: the data (DB0 -> DB7) to send
  */
 VR_EMU_TMS9918A_DLLEXPORT
-void vrEmuTms9918aWriteAddr(VrEmuTms9918a* tms9918a, byte data);
+void vrEmuTms9918aWriteAddr(VrEmuTms9918a* tms9918a, uint8_t data);
 
 /* Function:  vrEmuTms9918aWriteData
  * --------------------
  * write data (mode = 0) to the tms9918a
  *
- * byte: the data (DB0 -> DB7) to send
+ * uint8_t: the data (DB0 -> DB7) to send
  */
 VR_EMU_TMS9918A_DLLEXPORT
-void vrEmuTms9918aWriteData(VrEmuTms9918a* tms9918a, byte data);
+void vrEmuTms9918aWriteData(VrEmuTms9918a* tms9918a, uint8_t data);
 
 /* Function:  vrEmuTms9918aReadStatus
  * --------------------
  * read from the status register
  */
 VR_EMU_TMS9918A_DLLEXPORT
-byte vrEmuTms9918aReadStatus(VrEmuTms9918a* tms9918a);
+uint8_t vrEmuTms9918aReadStatus(VrEmuTms9918a* tms9918a);
 
 /* Function:  vrEmuTms9918aReadData
  * --------------------
  * read data (mode = 0) from the tms9918a
  */
 VR_EMU_TMS9918A_DLLEXPORT
-byte vrEmuTms9918aReadData(VrEmuTms9918a* tms9918a);
+uint8_t vrEmuTms9918aReadData(VrEmuTms9918a* tms9918a);
 
 /* Function:  vrEmuTms9918aReadDataNoInc
  * --------------------
@@ -140,7 +139,7 @@ byte vrEmuTms9918aReadData(VrEmuTms9918a* tms9918a);
  * don't increment the address pointer
  */
 VR_EMU_TMS9918A_DLLEXPORT
-byte vrEmuTms9918aReadDataNoInc(VrEmuTms9918a* tms9918a);
+uint8_t vrEmuTms9918aReadDataNoInc(VrEmuTms9918a* tms9918a);
 
 
 /* Function:  vrEmuTms9918aScanLine
@@ -150,21 +149,21 @@ byte vrEmuTms9918aReadDataNoInc(VrEmuTms9918a* tms9918a);
  * pixels to be filled with TMS9918 color palette indexes (vrEmuTms9918aColor)
  */
 VR_EMU_TMS9918A_DLLEXPORT
-void vrEmuTms9918aScanLine(VrEmuTms9918a* tms9918a, byte y, byte pixels[TMS9918A_PIXELS_X]);
+void vrEmuTms9918aScanLine(VrEmuTms9918a* tms9918a, uint8_t y, uint8_t pixels[TMS9918A_PIXELS_X]);
 
 /* Function:  vrEmuTms9918aRegValue
  * ----------------------------------------
  * return a reigister value
  */
 VR_EMU_TMS9918A_DLLEXPORT
-byte vrEmuTms9918aRegValue(VrEmuTms9918a* tms9918a, vrEmuTms9918aRegister reg);
+uint8_t vrEmuTms9918aRegValue(VrEmuTms9918a* tms9918a, vrEmuTms9918aRegister reg);
 
 /* Function:  vrEmuTms9918aVramValue
  * ----------------------------------------
  * return a value from vram
  */
 VR_EMU_TMS9918A_DLLEXPORT
-byte vrEmuTms9918aVramValue(VrEmuTms9918a* tms9918a, unsigned short addr);
+uint8_t vrEmuTms9918aVramValue(VrEmuTms9918a* tms9918a, unsigned short addr);
 
 
 /* Function:  vrEmuTms9918aDisplayEnabled
