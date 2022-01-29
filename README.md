@@ -32,7 +32,6 @@ The goal is to emulate all documented modes listed in the [TMS9918A/TMS9928A/TMS
 #### Multicolor Mode Demo
 <img src="res/mcdemo.gif" alt="Multicolor Mode Demo" width="1279px">
 
-
 ## Quick start
 
 ```c
@@ -62,6 +61,8 @@ int main()
   //
   // The helper functions below wrap the above functions and are not required.
   // vrEmuTms9918Util.h/c can be omitted if you're not using them.
+  //
+  // For a full example, see https://github.com/visrealm/hbc-56/blob/master/emulator/src/devices/tms9918_device.c
   
   // set up the VDP write-only registers
   vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_0, TMS_R0_MODE_GRAPHICS_I);
@@ -133,6 +134,18 @@ int main()
   return 0;
 }
 ```
+
+## Real example
+
+This library is used in the [HBC-56](https://github.com/visrealm/hbc-56) emulator.
+
+The HBC-56 uses this library to support:
+
+* Rendering to an SDL texture.
+* TMS9918 VSYNC Interrupts.
+* Time-based rendering. Supports beam-time.
+
+Full source: [hbc-56/emulator/src/devices/tms9918_device.c](https://github.com/visrealm/hbc-56/blob/master/emulator/src/devices/tms9918_device.c)
 
 ## License
 This code is licensed under the [MIT](https://opensource.org/licenses/MIT "MIT") license
