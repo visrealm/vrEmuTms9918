@@ -18,7 +18,7 @@ The goal is to emulate all documented modes listed in the [TMS9918A/TMS9928A/TMS
 * VSYNC interrupt
 * Individual scanline rendering
 
-## Screenshots:
+## Demos:
 
 #### Graphics Mode I Demo
 <img src="res/mode1demo.gif" alt="Graphics Mode I Demo" width="1279px">
@@ -77,15 +77,23 @@ int main()
   
   // send it some data (a pattern)
   vrEmuTms9918SetAddressWrite(tms9918, TMS_VRAM_PATT_ADDRESS);
-  
-  char smile[] = { 0x3C, 0x42, 0x81, 0xA5, 0x81, 0x99, 0x42, 0x3C };
+
+  // update pattern #0
+  char smile[] = {0b00111100,
+                  0b01000010,
+                  0b10000001,
+                  0b10100101,
+                  0b10000001,
+                  0b10011001,
+                  0b01000010,
+                  0b00111100};
   vrEmuTms9918WriteBytes(tms9918, smile, sizeof(smile));
   
+  // update fg/bg color for first 8 characters
   vrEmuTms9918SetAddressWrite(tms9918, TMS_VRAM_COLOR_ADDRESS)
   vrEmuTms9918WriteData(tms9918, vrEmuTms9918FgBgColor(TMS_BLACK, TMS_LT_YELLOW));
-  
-
-  // send a byte to the name table
+ 
+  // output smile pattern to screen
   vrEmuTms9918SetAddressWrite(tms9918, TMS_VRAM_NAME_ADDRESS);
 
   // a few smiles
@@ -93,26 +101,33 @@ int main()
   vrEmuTms9918WriteData(tms9918, 0x00);
   vrEmuTms9918WriteData(tms9918, 0x00);
   
-  char scanline[TMS9918A_PIXELS_X]; // scanline buffer
-  
-  uint32_t frameBuffer[TMS9918A_PIXELS_X * TMS9918A_PIXELS_Y]; // framebuffer (for SDL texture)
-
   // render the display
+  char scanline[TMS9918A_PIXELS_X]; // scanline buffer
+
+  // an example output (a framebuffer for an SDL texture)
+  uint32_t frameBuffer[TMS9918A_PIXELS_X * TMS9918A_PIXELS_Y];
+
+  // generate all scanlines and render to framebuffer
   uint32_t *pixPtr = frameBuffer;
   for (int y = 0; y < TMS9918A_PIXELS_Y; ++y)
   {
     // get the scanline pixels
     vrEmuTms9918ScanLine(tms9918, y, scanline);
     
-    // here, you can do whatever you like with the pixel data
-    // eg. render to an SDL texture/framebuffer...
     for (int x = 0; x < TMS9918A_PIXELS_X; ++x)
     {
+      // values returned from vrEmuTms9918ScanLine() are palette indexes
+      // use the vrEmuTms9918Palette array to convert to an RGBA value      
       *pixPtr++ = vrEmuTms9918Palette[scanline[x]];
     }    
   }
   
   // output the buffer...
+  
+  ...
+  
+  
+  // clean up
   
   vrEmuTms9918Destroy(tms9918);
   tms9918 = NULL;
