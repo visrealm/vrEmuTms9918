@@ -53,7 +53,19 @@ int main()
   // create a new tms9918
   tms9918 = vrEmuTms9918New();
   
-  // set up the VRP write-only registers
+  // Here, we're using the helper functions provided by vrEmuTms9918Util.h
+  //
+  // In a full system emulator, the only functions required (connected to the system bus) would be:
+  //
+  //  * vrEmuTms9918WriteAddr()
+  //  * vrEmuTms9918WriteData()
+  //  * vrEmuTms9918ReadStatus()
+  //  * vrEmuTms9918ReadData()
+  //
+  // The helper functions below wrap the above functions and are not required.
+  // vrEmuTms9918Util.h/c can be omitted if you're not using them.
+  
+  // set up the VDP write-only registers
   vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_0, TMS_R0_MODE_GRAPHICS_I);
   vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_1, TMS_R1_MODE_GRAPHICS_I | TMS_R1_RAM_16K);
   vrEmuTms9918SetNameTableAddr(tms9918, TMS_VRAM_NAME_ADDRESS);
