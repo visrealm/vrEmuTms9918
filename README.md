@@ -45,13 +45,11 @@ The goal is to emulate all documented modes listed in the [TMS9918A/TMS9928A/TMS
 #define TMS_VRAM_SPRITE_ATTR_ADDRESS   0x3B00
 #define TMS_VRAM_SPRITE_PATT_ADDRESS   0x1800
 
-VrEmuTms9918 *tms9918 = NULL;
-
 // program entry point
 int main()
 {
   // create a new tms9918
-  tms9918 = vrEmuTms9918New();
+  VrEmuTms9918 *tms9918 = vrEmuTms9918New();
   
   // Here, we're using the helper functions provided by vrEmuTms9918Util.h
   //
