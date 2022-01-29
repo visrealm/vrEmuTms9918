@@ -1,4 +1,4 @@
-# vrEmuTms9918 - TMS9918/TMS9918A/TMS9928A/TMS9929A VDP Emulator
+# vrEmuTms9918 - TMS9918 / TMS9918A / TMS9929A VDP Emulator
 
 TMS9918 emulator. Core engine written in C99. Zero dependencies.
 
