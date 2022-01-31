@@ -1,4 +1,4 @@
-# vrEmuTms9918 - TMS9918/TMS9918A/TMS9928A/TMS9929A VDP Emulator
+# vrEmuTms9918 - TMS9918 / TMS9918A / TMS9929A VDP Emulator
 
 TMS9918 emulator. Core engine written in C99. Zero dependencies.
 
@@ -18,7 +18,7 @@ The goal is to emulate all documented modes listed in the [TMS9918A/TMS9928A/TMS
 * VSYNC interrupt
 * Individual scanline rendering
 
-## Screenshots:
+## Demos:
 
 #### Graphics Mode I Demo
 <img src="res/mode1demo.gif" alt="Graphics Mode I Demo" width="1279px">
@@ -32,7 +32,6 @@ The goal is to emulate all documented modes listed in the [TMS9918A/TMS9928A/TMS
 #### Multicolor Mode Demo
 <img src="res/mcdemo.gif" alt="Multicolor Mode Demo" width="1279px">
 
-
 ## Quick start
 
 ```c
@@ -45,13 +44,11 @@ The goal is to emulate all documented modes listed in the [TMS9918A/TMS9928A/TMS
 #define TMS_VRAM_SPRITE_ATTR_ADDRESS   0x3B00
 #define TMS_VRAM_SPRITE_PATT_ADDRESS   0x1800
 
-VrEmuTms9918 *tms9918 = NULL;
-
 // program entry point
 int main()
 {
   // create a new tms9918
-  tms9918 = vrEmuTms9918New();
+  VrEmuTms9918 *tms9918 = vrEmuTms9918New();
   
   // Here, we're using the helper functions provided by vrEmuTms9918Util.h
   //
@@ -64,6 +61,8 @@ int main()
   //
   // The helper functions below wrap the above functions and are not required.
   // vrEmuTms9918Util.h/c can be omitted if you're not using them.
+  //
+  // For a full example, see https://github.com/visrealm/hbc-56/blob/master/emulator/src/devices/tms9918_device.c
   
   // set up the VDP write-only registers
   vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_0, TMS_R0_MODE_GRAPHICS_I);
@@ -77,15 +76,23 @@ int main()
   
   // send it some data (a pattern)
   vrEmuTms9918SetAddressWrite(tms9918, TMS_VRAM_PATT_ADDRESS);
-  
-  char smile[] = { 0x3C, 0x42, 0x81, 0xA5, 0x81, 0x99, 0x42, 0x3C };
+
+  // update pattern #0
+  char smile[] = {0b00111100,
+                  0b01000010,
+                  0b10000001,
+                  0b10100101,
+                  0b10000001,
+                  0b10011001,
+                  0b01000010,
+                  0b00111100};
   vrEmuTms9918WriteBytes(tms9918, smile, sizeof(smile));
   
+  // update fg/bg color for first 8 characters
   vrEmuTms9918SetAddressWrite(tms9918, TMS_VRAM_COLOR_ADDRESS)
   vrEmuTms9918WriteData(tms9918, vrEmuTms9918FgBgColor(TMS_BLACK, TMS_LT_YELLOW));
-  
-
-  // send a byte to the name table
+ 
+  // output smile pattern to screen
   vrEmuTms9918SetAddressWrite(tms9918, TMS_VRAM_NAME_ADDRESS);
 
   // a few smiles
@@ -93,26 +100,33 @@ int main()
   vrEmuTms9918WriteData(tms9918, 0x00);
   vrEmuTms9918WriteData(tms9918, 0x00);
   
-  char scanline[TMS9918A_PIXELS_X]; // scanline buffer
-  
-  uint32_t frameBuffer[TMS9918A_PIXELS_X * TMS9918A_PIXELS_Y]; // framebuffer (for SDL texture)
-
   // render the display
+  char scanline[TMS9918A_PIXELS_X]; // scanline buffer
+
+  // an example output (a framebuffer for an SDL texture)
+  uint32_t frameBuffer[TMS9918A_PIXELS_X * TMS9918A_PIXELS_Y];
+
+  // generate all scanlines and render to framebuffer
   uint32_t *pixPtr = frameBuffer;
   for (int y = 0; y < TMS9918A_PIXELS_Y; ++y)
   {
     // get the scanline pixels
     vrEmuTms9918ScanLine(tms9918, y, scanline);
     
-    // here, you can do whatever you like with the pixel data
-    // eg. render to an SDL texture/framebuffer...
     for (int x = 0; x < TMS9918A_PIXELS_X; ++x)
     {
+      // values returned from vrEmuTms9918ScanLine() are palette indexes
+      // use the vrEmuTms9918Palette array to convert to an RGBA value      
       *pixPtr++ = vrEmuTms9918Palette[scanline[x]];
     }    
   }
   
   // output the buffer...
+  
+  ...
+  
+  
+  // clean up
   
   vrEmuTms9918Destroy(tms9918);
   tms9918 = NULL;
@@ -120,6 +134,18 @@ int main()
   return 0;
 }
 ```
+
+## Real example
+
+This library is used in the [HBC-56](https://github.com/visrealm/hbc-56) emulator.
+
+The HBC-56 uses this library to support:
+
+* Rendering to an SDL texture.
+* TMS9918 VSYNC Interrupts.
+* Time-based rendering. Supports beam-time.
+
+Full source: [hbc-56/emulator/src/devices/tms9918_device.c](https://github.com/visrealm/hbc-56/blob/master/emulator/src/devices/tms9918_device.c)
 
 ## License
 This code is licensed under the [MIT](https://opensource.org/licenses/MIT "MIT") license
