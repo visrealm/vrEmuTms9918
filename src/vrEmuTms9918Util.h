@@ -14,6 +14,8 @@
 
 #include "vrEmuTms9918.h"
 
+#include <stddef.h>
+
 #define TMS_R0_MODE_GRAPHICS_I    0x00
 #define TMS_R0_MODE_GRAPHICS_II   0x02
 #define TMS_R0_MODE_MULTICOLOR    0x00
