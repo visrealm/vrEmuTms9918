@@ -45,7 +45,7 @@ struct vrEmuTMS9918_s
 
   uint8_t lastMode;
 
-  unsigned short currentAddress;
+  uint16_t currentAddress;
 
   vrEmuTms9918Mode mode;
 
@@ -83,16 +83,16 @@ static vrEmuTms9918Mode tmsMode(VrEmuTms9918* tms9918)
   * --------------------
   * sprite size (0 = 8x8, 1 = 16x16)
   */
-static inline int tmsSpriteSize(VrEmuTms9918* tms9918)
+static inline bool tmsSpriteSize(VrEmuTms9918* tms9918)
 {
-  return (tms9918->registers[TMS_REG_1] & 0x02) >> 1;
+  return tms9918->registers[TMS_REG_1] & 0x02;
 }
 
 /* Function:  tmsSpriteMagnification
   * --------------------
   * sprite size (0 = 1x, 1 = 2x)
   */
-static inline int tmsSpriteMag(VrEmuTms9918* tms9918)
+static inline bool tmsSpriteMag(VrEmuTms9918* tms9918)
 {
   return tms9918->registers[TMS_REG_1] & 0x01;
 }
@@ -101,7 +101,7 @@ static inline int tmsSpriteMag(VrEmuTms9918* tms9918)
   * --------------------
   * name table base address
   */
-static inline unsigned short tmsNameTableAddr(VrEmuTms9918* tms9918)
+static inline uint16_t tmsNameTableAddr(VrEmuTms9918* tms9918)
 {
   return (tms9918->registers[TMS_REG_2] & 0x0f) << 10;
 }
@@ -110,7 +110,7 @@ static inline unsigned short tmsNameTableAddr(VrEmuTms9918* tms9918)
   * --------------------
   * color table base address
   */
-static inline unsigned short tmsColorTableAddr(VrEmuTms9918* tms9918)
+static inline uint16_t tmsColorTableAddr(VrEmuTms9918* tms9918)
 {
   if (tms9918->mode == TMS_MODE_GRAPHICS_II)
     return (tms9918->registers[TMS_REG_3] & 0x80) << 6;
@@ -121,7 +121,7 @@ static inline unsigned short tmsColorTableAddr(VrEmuTms9918* tms9918)
   * --------------------
   * pattern table base address
   */
-static inline unsigned short tmsPatternTableAddr(VrEmuTms9918* tms9918)
+static inline uint16_t tmsPatternTableAddr(VrEmuTms9918* tms9918)
 {
   if (tms9918->mode == TMS_MODE_GRAPHICS_II)
     return (tms9918->registers[TMS_REG_4] & 0x04) << 11;
@@ -132,7 +132,7 @@ static inline unsigned short tmsPatternTableAddr(VrEmuTms9918* tms9918)
   * --------------------
   * sprite attribute table base address
   */
-static inline unsigned short tmsSpriteAttrTableAddr(VrEmuTms9918* tms9918)
+static inline uint16_t tmsSpriteAttrTableAddr(VrEmuTms9918* tms9918)
 {
   return (tms9918->registers[TMS_REG_5] & 0x7f) << 7;
 }
@@ -141,7 +141,7 @@ static inline unsigned short tmsSpriteAttrTableAddr(VrEmuTms9918* tms9918)
   * --------------------
   * sprite pattern table base address
   */
-static inline unsigned short tmsSpritePatternTableAddr(VrEmuTms9918* tms9918)
+static inline uint16_t tmsSpritePatternTableAddr(VrEmuTms9918* tms9918)
 {
   return (tms9918->registers[TMS_REG_6] & 0x07) << 11;
 }
@@ -314,8 +314,8 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t vrEmuTms9918ReadDataNoInc(VrEmuTms9918* tms9918
 static void vrEmuTms9918OutputSprites(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
   int spriteSizePx = (tmsSpriteSize(tms9918) ? 16 : 8) * (tmsSpriteMag(tms9918) ? 2 : 1);
-  unsigned short spriteAttrTableAddr = tmsSpriteAttrTableAddr(tms9918);
-  unsigned short spritePatternAddr = tmsSpritePatternTableAddr(tms9918);
+  uint16_t spriteAttrTableAddr = tmsSpriteAttrTableAddr(tms9918);
+  uint16_t spritePatternAddr = tmsSpritePatternTableAddr(tms9918);
 
   int spritesShown = 0;
 
@@ -379,7 +379,7 @@ static void vrEmuTms9918OutputSprites(VrEmuTms9918* tms9918, uint8_t y, uint8_t 
     /* sprite is visible on this line */
     uint8_t patternName = tms9918->vram[spriteAttrAddr + 2];
 
-    unsigned short patternOffset = spritePatternAddr + patternName * 8 + patternRow;
+    uint16_t patternOffset = spritePatternAddr + patternName * 8 + patternRow;
 
     int hPos = tms9918->vram[spriteAttrAddr + 1];
     if (tms9918->vram[spriteAttrAddr + 3] & 0x80)  /* check early clock bit */
@@ -440,10 +440,10 @@ static void vrEmuTms9918GraphicsIScanLine(VrEmuTms9918* tms9918, uint8_t y, uint
   int textRow = y / 8;
   int patternRow = y % 8;
 
-  unsigned short namesAddr = tmsNameTableAddr(tms9918) + textRow * GRAPHICS_NUM_COLS;
+  uint16_t namesAddr = tmsNameTableAddr(tms9918) + textRow * GRAPHICS_NUM_COLS;
 
-  unsigned short patternBaseAddr = tmsPatternTableAddr(tms9918);
-  unsigned short colorBaseAddr = tmsColorTableAddr(tms9918);
+  uint16_t patternBaseAddr = tmsPatternTableAddr(tms9918);
+  uint16_t colorBaseAddr = tmsColorTableAddr(tms9918);
 
   int pixelIndex = -1;
 
@@ -477,13 +477,13 @@ static void vrEmuTms9918GraphicsIIScanLine(VrEmuTms9918* tms9918, uint8_t y, uin
   int textRow = y / 8;
   int patternRow = y % 8;
 
-  unsigned short namesAddr = tmsNameTableAddr(tms9918) + textRow * GRAPHICS_NUM_COLS;
+  uint16_t namesAddr = tmsNameTableAddr(tms9918) + textRow * GRAPHICS_NUM_COLS;
 
   int pageThird = (textRow & 0x18) >> 3; /* which page? 0-2 */
   int pageOffset = pageThird << 11;       /* offset (0, 0x800 or 0x1000) */
 
-  unsigned short patternBaseAddr = tmsPatternTableAddr(tms9918) + pageOffset;
-  unsigned short colorBaseAddr = tmsColorTableAddr(tms9918) + pageOffset;
+  uint16_t patternBaseAddr = tmsPatternTableAddr(tms9918) + pageOffset;
+  uint16_t colorBaseAddr = tmsColorTableAddr(tms9918) + pageOffset;
 
   int pixelIndex = -1;
 
@@ -516,7 +516,7 @@ static void vrEmuTms9918TextScanLine(VrEmuTms9918* tms9918, uint8_t y, uint8_t p
   int textRow = y / 8;
   int patternRow = y % 8;
 
-  unsigned short namesAddr = tmsNameTableAddr(tms9918) + textRow * TEXT_NUM_COLS;
+  uint16_t namesAddr = tmsNameTableAddr(tms9918) + textRow * TEXT_NUM_COLS;
 
   vrEmuTms9918Color bgColor = tmsMainBgColor(tms9918);
   vrEmuTms9918Color fgColor = tmsMainFgColor(tms9918);
@@ -560,7 +560,7 @@ static void vrEmuTms9918MulticolorScanLine(VrEmuTms9918* tms9918, uint8_t y, uin
   int textRow = y / 8;
   int patternRow = (y / 4) % 2 + (textRow % 4) * 2;
 
-  unsigned short namesAddr = tmsNameTableAddr(tms9918) + textRow * GRAPHICS_NUM_COLS;
+  uint16_t namesAddr = tmsNameTableAddr(tms9918) + textRow * GRAPHICS_NUM_COLS;
 
   int pixelIndex = -1;
 
@@ -636,7 +636,7 @@ uint8_t vrEmuTms9918RegValue(VrEmuTms9918 * tms9918, vrEmuTms9918Register reg)
  * return a value from vram
  */
 VR_EMU_TMS9918_DLLEXPORT
-uint8_t vrEmuTms9918VramValue(VrEmuTms9918* tms9918, unsigned short addr)
+uint8_t vrEmuTms9918VramValue(VrEmuTms9918* tms9918, uint16_t addr)
 {
   if (tms9918 == NULL)
     return 0;
@@ -649,10 +649,10 @@ uint8_t vrEmuTms9918VramValue(VrEmuTms9918* tms9918, unsigned short addr)
   * check BLANK flag
   */
 VR_EMU_TMS9918_DLLEXPORT
-int vrEmuTms9918DisplayEnabled(VrEmuTms9918* tms9918)
+bool vrEmuTms9918DisplayEnabled(VrEmuTms9918* tms9918)
 {
   if (tms9918 == NULL)
-    return 0;
+    return false;
 
-  return (tms9918->registers[TMS_REG_1] & 0x40) ? 1 : 0;
+  return tms9918->registers[TMS_REG_1] & 0x40;
 }

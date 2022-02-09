@@ -21,17 +21,22 @@
  */
 
 #if VR_TMS9918_EMU_COMPILING_DLL
-#define VR_EMU_TMS9918_DLLEXPORT __declspec(dllexport)
+  #define VR_EMU_TMS9918_DLLEXPORT __declspec(dllexport)
 #elif VR_TMS9918_EMU_STATIC
-#define VR_EMU_TMS9918_DLLEXPORT extern
+  #ifdef __cplusplus
+    #define VR_EMU_TMS9918_DLLEXPORT extern "C"
+  #else
+    #define VR_EMU_TMS9918_DLLEXPORT extern
+  #endif
 #elif __EMSCRIPTEN__
-#include <emscripten.h>
-#define VR_EMU_TMS9918_DLLEXPORT EMSCRIPTEN_KEEPALIVE
+  #include <emscripten.h>
+  #define VR_EMU_TMS9918_DLLEXPORT EMSCRIPTEN_KEEPALIVE
 #else
-#define VR_EMU_TMS9918_DLLEXPORT __declspec(dllimport)
+  #define VR_EMU_TMS9918_DLLEXPORT __declspec(dllimport)
 #endif
 
 #include <stdint.h>
+#include <stdbool.h>
 
 /* PRIVATE DATA STRUCTURE
  * ---------------------------------------- */
@@ -177,7 +182,7 @@ uint8_t vrEmuTms9918RegValue(VrEmuTms9918* tms9918, vrEmuTms9918Register reg);
  * return a value from vram
  */
 VR_EMU_TMS9918_DLLEXPORT
-uint8_t vrEmuTms9918VramValue(VrEmuTms9918* tms9918, unsigned short addr);
+uint8_t vrEmuTms9918VramValue(VrEmuTms9918* tms9918, uint16_t addr);
 
 
 /* Function:  vrEmuTms9918DisplayEnabled
@@ -185,7 +190,7 @@ uint8_t vrEmuTms9918VramValue(VrEmuTms9918* tms9918, unsigned short addr);
   * check BLANK flag
   */
 VR_EMU_TMS9918_DLLEXPORT
-int vrEmuTms9918DisplayEnabled(VrEmuTms9918* tms9918);
+bool vrEmuTms9918DisplayEnabled(VrEmuTms9918* tms9918);
 
 
 #endif // _VR_EMU_TMS9918_H_
