@@ -285,7 +285,7 @@ VR_EMU_TMS9918_DLLEXPORT void vrEmuTms9918WriteData(VrEmuTms9918* tms9918, uint8
 VR_EMU_TMS9918_DLLEXPORT uint8_t vrEmuTms9918ReadStatus(VrEmuTms9918* tms9918)
 {
   uint8_t tmpStatus = tms9918->status;
-  tms9918->status &= ~(STATUS_INT | STATUS_COL);
+  tms9918->status = 0;
   return tmpStatus;
 }
 
@@ -482,6 +482,14 @@ static void vrEmuTms9918GraphicsIIScanLine(VrEmuTms9918* tms9918, uint8_t y, uin
   int pageThird = (textRow & 0x18) >> 3; /* which page? 0-2 */
   int pageOffset = pageThird << 11;       /* offset (0, 0x800 or 0x1000) */
 
+  bool invalidGfxII = (tms9918->registers[TMS_REG_4] & 0x03) != 0x03 ||
+                      (tms9918->registers[TMS_REG_3] & 0x7f) != 0x7f;
+
+  if (invalidGfxII)
+  {
+    pageOffset = 0;
+  }
+
   uint16_t patternBaseAddr = tmsPatternTableAddr(tms9918) + pageOffset;
   uint16_t colorBaseAddr = tmsColorTableAddr(tms9918) + pageOffset;
 
@@ -490,6 +498,11 @@ static void vrEmuTms9918GraphicsIIScanLine(VrEmuTms9918* tms9918, uint8_t y, uin
   for (int tileX = 0; tileX < GRAPHICS_NUM_COLS; ++tileX)
   {
     int pattern = tms9918->vram[namesAddr + tileX];
+
+    if (invalidGfxII)
+    {
+      pattern &= 0x07;
+    }
 
     uint8_t patternByte = tms9918->vram[patternBaseAddr + pattern * 8 + patternRow];
     uint8_t colorByte = tms9918->vram[colorBaseAddr + pattern * 8 + patternRow];
