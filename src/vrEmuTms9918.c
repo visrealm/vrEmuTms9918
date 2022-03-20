@@ -379,7 +379,7 @@ static void vrEmuTms9918OutputSprites(VrEmuTms9918* tms9918, uint8_t y, uint8_t 
     /* sprite is visible on this line */
     uint8_t patternName = tms9918->vram[spriteAttrAddr + 2];
 
-    uint16_t patternOffset = spritePatternAddr + patternName * 8 + patternRow;
+    uint16_t patternOffset = spritePatternAddr + patternName * 8 + (uint16_t)patternRow;
 
     int hPos = tms9918->vram[spriteAttrAddr + 1];
     if (tms9918->vram[spriteAttrAddr + 3] & 0x80)  /* check early clock bit */
@@ -437,7 +437,7 @@ static void vrEmuTms9918OutputSprites(VrEmuTms9918* tms9918, uint8_t y, uint8_t 
  */
 static void vrEmuTms9918GraphicsIScanLine(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
-  int textRow = y / 8;
+  uint8_t textRow = y >> 3;
   int patternRow = y % 8;
 
   uint16_t namesAddr = tmsNameTableAddr(tms9918) + textRow * GRAPHICS_NUM_COLS;
@@ -460,7 +460,7 @@ static void vrEmuTms9918GraphicsIScanLine(VrEmuTms9918* tms9918, uint8_t y, uint
 
     for (int i = 0; i < GRAPHICS_CHAR_WIDTH; ++i)
     {
-      pixels[++pixelIndex] = (patternByte & 0x80) ? fgColor : bgColor;
+      pixels[++pixelIndex] = (uint8_t)((patternByte & 0x80) ? fgColor : bgColor);
       patternByte <<= 1;
     }
   }
@@ -474,13 +474,13 @@ static void vrEmuTms9918GraphicsIScanLine(VrEmuTms9918* tms9918, uint8_t y, uint
  */
 static void vrEmuTms9918GraphicsIIScanLine(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
-  int textRow = y / 8;
+  uint8_t textRow = y >> 3;
   int patternRow = y % 8;
 
   uint16_t namesAddr = tmsNameTableAddr(tms9918) + textRow * GRAPHICS_NUM_COLS;
 
   int pageThird = (textRow & 0x18) >> 3; /* which page? 0-2 */
-  int pageOffset = pageThird << 11;       /* offset (0, 0x800 or 0x1000) */
+  uint16_t pageOffset = pageThird << 11;       /* offset (0, 0x800 or 0x1000) */
 
   bool invalidGfxII = (tms9918->registers[TMS_REG_4] & 0x03) != 0x03 ||
                       (tms9918->registers[TMS_REG_3] & 0x7f) != 0x7f;
@@ -512,7 +512,7 @@ static void vrEmuTms9918GraphicsIIScanLine(VrEmuTms9918* tms9918, uint8_t y, uin
 
     for (int i = 0; i < GRAPHICS_CHAR_WIDTH; ++i)
     {
-      pixels[++pixelIndex] = (patternByte & 0x80) ? fgColor : bgColor;
+      pixels[++pixelIndex] = (uint8_t)((patternByte & 0x80) ? fgColor : bgColor);
       patternByte <<= 1;
     }
   }
@@ -526,7 +526,7 @@ static void vrEmuTms9918GraphicsIIScanLine(VrEmuTms9918* tms9918, uint8_t y, uin
  */
 static void vrEmuTms9918TextScanLine(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
-  int textRow = y / 8;
+  uint8_t textRow = y >> 3;
   int patternRow = y % 8;
 
   uint16_t namesAddr = tmsNameTableAddr(tms9918) + textRow * TEXT_NUM_COLS;
@@ -549,11 +549,9 @@ static void vrEmuTms9918TextScanLine(VrEmuTms9918* tms9918, uint8_t y, uint8_t p
 
     uint8_t patternByte = tms9918->vram[tmsPatternTableAddr(tms9918) + pattern * 8 + patternRow];
 
-    uint8_t colorByte = tms9918->vram[tmsColorTableAddr(tms9918) + pattern / 8];
-
     for (int i = 0; i < TEXT_CHAR_WIDTH; ++i)
     {
-      pixels[++pixelIndex] = (patternByte & 0x80) ? fgColor : bgColor;
+      pixels[++pixelIndex] = (uint8_t)((patternByte & 0x80) ? fgColor : bgColor);
       patternByte <<= 1;
     }
   }
@@ -570,7 +568,7 @@ static void vrEmuTms9918TextScanLine(VrEmuTms9918* tms9918, uint8_t y, uint8_t p
  */
 static void vrEmuTms9918MulticolorScanLine(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
-  int textRow = y / 8;
+  uint8_t textRow = y >> 3;
   int patternRow = (y / 4) % 2 + (textRow % 4) * 2;
 
   uint16_t namesAddr = tmsNameTableAddr(tms9918) + textRow * GRAPHICS_NUM_COLS;

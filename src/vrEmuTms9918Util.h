@@ -50,7 +50,7 @@ const uint32_t vrEmuTms9918Palette[];
 inline static void vrEmuTms9918WriteRegisterValue(VrEmuTms9918 *tms9918, vrEmuTms9918Register reg, uint8_t value)
 {
   vrEmuTms9918WriteAddr(tms9918, value);
-  vrEmuTms9918WriteAddr(tms9918, 0x80 | reg);
+  vrEmuTms9918WriteAddr(tms9918, 0x80 | (uint8_t)reg);
 }
 
 /*
@@ -86,7 +86,7 @@ inline static void vrEmuTms9918WriteBytes(VrEmuTms9918* tms9918, uint8_t *bytes,
  */
 inline static uint8_t vrEmuTms9918FgBgColor(vrEmuTms9918Color fg, vrEmuTms9918Color bg)
 {
-  return (fg << 4) | bg;
+  return (uint8_t)((uint8_t)fg << 4) | (uint8_t)bg;
 }
 
 /*
@@ -102,7 +102,7 @@ inline static void vrEmuTms9918SetNameTableAddr(VrEmuTms9918* tms9918, uint16_t 
  */
 inline static void vrEmuTms9918SetColorTableAddr(VrEmuTms9918* tms9918, uint16_t addr)
 {
-  vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_COLOR_TABLE, addr >> 6);
+  vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_COLOR_TABLE, (uint8_t)(addr >> 6));
 }
 
 /*
@@ -118,7 +118,7 @@ inline static void vrEmuTms9918SetPatternTableAddr(VrEmuTms9918* tms9918, uint16
  */
 inline static void vrEmuTms9918SetSpriteAttrTableAddr(VrEmuTms9918* tms9918, uint16_t addr)
 {
-  vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_SPRITE_ATTR_TABLE, addr >> 7);
+  vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_SPRITE_ATTR_TABLE, (uint8_t)(addr >> 7));
 }
 
 /*
