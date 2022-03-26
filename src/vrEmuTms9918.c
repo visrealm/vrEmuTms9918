@@ -642,6 +642,22 @@ uint8_t vrEmuTms9918RegValue(VrEmuTms9918 * tms9918, vrEmuTms9918Register reg)
   return tms9918->registers[reg & 0x07];
 }
 
+/* Function:  vrEmuTms9918WriteRegValue
+ * ----------------------------------------
+ * write a reigister value
+ */
+VR_EMU_TMS9918_DLLEXPORT
+void vrEmuTms9918WriteRegValue(VrEmuTms9918* tms9918, vrEmuTms9918Register reg, uint8_t value)
+{
+  if (tms9918 != NULL)
+  {
+    tms9918->registers[reg & 0x07] = value;
+    tms9918->mode = tmsMode(tms9918);
+  }
+}
+
+
+
 /* Function:  vrEmuTms9918VramValue
  * ----------------------------------------
  * return a value from vram

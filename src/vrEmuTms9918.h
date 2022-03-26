@@ -177,6 +177,14 @@ void vrEmuTms9918ScanLine(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS99
 VR_EMU_TMS9918_DLLEXPORT
 uint8_t vrEmuTms9918RegValue(VrEmuTms9918* tms9918, vrEmuTms9918Register reg);
 
+/* Function:  vrEmuTms9918WriteRegValue
+ * ----------------------------------------
+ * write a reigister value
+ */
+VR_EMU_TMS9918_DLLEXPORT
+void vrEmuTms9918WriteRegValue(VrEmuTms9918* tms9918, vrEmuTms9918Register reg, uint8_t value);
+
+
 /* Function:  vrEmuTms9918VramValue
  * ----------------------------------------
  * return a value from vram
