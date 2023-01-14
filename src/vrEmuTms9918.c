@@ -53,10 +53,8 @@
   * ---------------------------------------- */
 struct vrEmuTMS9918_s
 {
-  uint8_t vram[VRAM_SIZE];
-
   uint8_t registers[TMS_NUM_REGISTERS];
-  
+
   uint8_t status;
 
   uint16_t currentAddress;
@@ -64,6 +62,8 @@ struct vrEmuTMS9918_s
   uint8_t ctrlRegStage;
 
   vrEmuTms9918Mode mode;
+
+  uint8_t vram[VRAM_SIZE];
 };
 
 
