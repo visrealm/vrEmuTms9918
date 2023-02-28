@@ -73,9 +73,9 @@ inline static void vrEmuTms9918SetAddressWrite(VrEmuTms9918* tms9918, uint16_t a
 /*
  * Write a series of bytes to the VRAM
  */
-inline static void vrEmuTms9918WriteBytes(VrEmuTms9918* tms9918, uint8_t *bytes, size_t numBytes)
+inline static void vrEmuTms9918WriteBytes(VrEmuTms9918* tms9918, const uint8_t *bytes, size_t numBytes)
 {
-  for (int i = 0; i < numBytes; ++i)
+  for (size_t i = 0; i < numBytes; ++i)
   {
     vrEmuTms9918WriteData(tms9918, bytes[i]);
   }
