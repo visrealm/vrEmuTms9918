@@ -366,7 +366,8 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t vrEmuTms9918ReadDataNoInc(VrEmuTms9918* tms9918
 void __not_in_flash_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
   const bool spriteMag = tmsSpriteMag(tms9918);
-  uint8_t spriteSize = tmsSpriteSize(tms9918);
+  const bool sprite16 = tmsSpriteSize(tms9918) == 16;
+  const uint8_t spriteSize = tmsSpriteSize(tms9918);
   const uint8_t spriteSizePx = spriteSize * (spriteMag + 1);
   const uint16_t spriteAttrTableAddr = tmsSpriteAttrTableAddr(tms9918);
   const uint16_t spritePatternAddr = tmsSpritePatternTableAddr(tms9918);
@@ -394,7 +395,7 @@ void __not_in_flash_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms9918, uint8
     }
 
     /* check if sprite position is in the -31 to 0 range and move back to top */
-    if (yPos > (uint8_t)-32)
+    if (yPos > 0xe0)
     {
       yPos -= 256;
     }
@@ -405,14 +406,17 @@ void __not_in_flash_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms9918, uint8
     int16_t pattRow = y - yPos;
     if (spriteMag)
     {
-      pattRow /= 2;
+      pattRow >>= 1;  // this needs to be a shift because -1 / 2 becomes 0. Bad.
     }
 
     /* check if sprite is visible on this line */
     if (pattRow < 0 || pattRow >= spriteSize)
+    {
+      spriteAttr += SPRITE_ATTR_BYTES;
       continue;
+    }
 
-    vrEmuTms9918Color spriteColor = spriteAttr[SPRITE_ATTR_COLOR] & 0x0f;
+    const vrEmuTms9918Color spriteColor = spriteAttr[SPRITE_ATTR_COLOR] & 0x0f;
 
     /* have we exceeded the scanline sprite limit? */
     if (++spritesShown > MAX_SCANLINE_SPRITES)
@@ -431,7 +435,7 @@ void __not_in_flash_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms9918, uint8
     const int16_t earlyClockOffset = (spriteAttr[SPRITE_ATTR_COLOR] & 0x80) ? -32 : 0;
     const int16_t xPos = (int16_t)(spriteAttr[SPRITE_ATTR_X]) + earlyClockOffset;
 
-    uint8_t pattByte = tms9918->vram[pattOffset];
+    int8_t pattByte = tms9918->vram[pattOffset];
     uint8_t screenBit = 0, pattBit = 0;
 
     int16_t endXPos = xPos + spriteSizePx;
@@ -444,11 +448,11 @@ void __not_in_flash_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms9918, uint8
     {
       if (screenX >= 0)
       {
-        if (pattByte & (0x80 >> pattBit))
+        if (pattByte < 0)
         {
           /* we still process transparent sprites, since
              they're used in 5S and collision checks */
-          if (spriteColor != TMS_TRANSPARENT)
+         // if (spriteColor != TMS_TRANSPARENT)
           {
             pixels[screenX] = spriteColor;
           }
@@ -464,7 +468,8 @@ void __not_in_flash_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms9918, uint8
       /* next pattern bit if non-magnified or if odd screen bit */
       if (!spriteMag || (screenBit & 0x01))
       {
-        if (++pattBit == GRAPHICS_CHAR_WIDTH && spriteMag) /* from A -> C or B -> D of large sprite */
+        pattByte<<=1;
+        if (++pattBit == GRAPHICS_CHAR_WIDTH && sprite16) /* from A -> C or B -> D of large sprite */
         {
           pattBit = 0;
           pattByte = tms9918->vram[pattOffset + PATTERN_BYTES * 2];
@@ -507,12 +512,12 @@ void __not_in_flash_func(vrEmuTms9918GraphicsIScanLine)(VrEmuTms9918* tms9918, u
     for (uint8_t pattBit = 0; pattBit < GRAPHICS_CHAR_WIDTH; ++pattBit)
     {
       const bool pixelBit = pattByte & 0x80;
-      pixels[tileX * GRAPHICS_CHAR_WIDTH + pattBit] = pixelBit ? fgColor : bgColor;
+      *(pixels++) = pixelBit ? fgColor : bgColor;
       pattByte <<= 1;
     }
   }
 
-  vrEmuTms9918OutputSprites(tms9918, y, pixels);
+  vrEmuTms9918OutputSprites(tms9918, y, pixels - TMS9918_PIXELS_X);
 }
 
 /* Function:  vrEmuTms9918GraphicsIIScanLine
