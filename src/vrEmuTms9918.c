@@ -715,7 +715,7 @@ uint8_t vrEmuTms9918VramValue(VrEmuTms9918* tms9918, uint16_t addr)
   * check BLANK flag
   */
 VR_EMU_TMS9918_DLLEXPORT
-bool __not_in_flash_func(vrEmuTms9918DisplayEnabled)(VrEmuTms9918* tms9918)
+bool vrEmuTms9918DisplayEnabled(VrEmuTms9918* tms9918)
 {
   if (tms9918 == NULL)
     return false;
