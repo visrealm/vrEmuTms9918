@@ -15,6 +15,13 @@
 #include <math.h>
 #include <string.h>
 
+#if PICO_BUILD
+  #include "pico/stdlib.h"
+  #define inline __force_inline
+#else
+  #define __time_critical_func(fn) fn
+#endif
+
 #define VRAM_SIZE           (1 << 14) /* 16KB */
 #define VRAM_MASK     (VRAM_SIZE - 1) /* 0x3fff */
 
@@ -75,6 +82,8 @@ struct vrEmuTMS9918_s
 
   /* video ram */
   uint8_t vram[VRAM_SIZE];
+
+  uint8_t rowSpriteBits[TMS9918_PIXELS_X]; /* collision mask */
 };
 
 
@@ -82,7 +91,7 @@ struct vrEmuTMS9918_s
  * ----------------------------------------
  * return the current display mode
  */
-static vrEmuTms9918Mode tmsMode(VrEmuTms9918* tms9918)
+static vrEmuTms9918Mode __time_critical_func(tmsMode)(VrEmuTms9918* tms9918)
 {
   if (tms9918->registers[TMS_REG_0] & TMS_R0_MODE_GRAPHICS_II)
   {
@@ -353,13 +362,15 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t vrEmuTms9918ReadDataNoInc(VrEmuTms9918* tms9918
  * ----------------------------------------
  * Output Sprites to a scanline
  */
-static void vrEmuTms9918OutputSprites(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
+static void __time_critical_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
-  const uint8_t spriteSizePx = tmsSpriteSize(tms9918) * (tmsSpriteMag(tms9918) ? 2 : 1);
+  const bool spriteMag = tmsSpriteMag(tms9918);
+  const bool sprite16 = tmsSpriteSize(tms9918) == 16;
+  const uint8_t spriteSize = tmsSpriteSize(tms9918);
+  const uint8_t spriteSizePx = spriteSize * (spriteMag + 1);
   const uint16_t spriteAttrTableAddr = tmsSpriteAttrTableAddr(tms9918);
   const uint16_t spritePatternAddr = tmsSpritePatternTableAddr(tms9918);
 
-  uint8_t rowSpriteBits[TMS9918_PIXELS_X]; /* collision mask */
   uint8_t spritesShown = 0;
 
   if (y == 0)
@@ -367,11 +378,9 @@ static void vrEmuTms9918OutputSprites(VrEmuTms9918* tms9918, uint8_t y, uint8_t 
     tms9918->status = 0;
   }
 
+  uint8_t *spriteAttr = tms9918->vram + spriteAttrTableAddr;
   for (uint8_t spriteIdx = 0; spriteIdx < MAX_SPRITES; ++spriteIdx)
   {
-    const uint16_t spriteAttrAddr = spriteAttrTableAddr + spriteIdx * SPRITE_ATTR_BYTES;
-    const uint8_t *spriteAttr = tms9918->vram + spriteAttrAddr;
-
     int16_t yPos = spriteAttr[SPRITE_ATTR_Y];
 
     /* stop processing when yPos == LAST_SPRITE_YPOS */
@@ -385,7 +394,7 @@ static void vrEmuTms9918OutputSprites(VrEmuTms9918* tms9918, uint8_t y, uint8_t 
     }
 
     /* check if sprite position is in the -31 to 0 range and move back to top */
-    if (yPos > (uint8_t)-32)
+    if (yPos > 0xe0)
     {
       yPos -= 256;
     }
@@ -394,22 +403,19 @@ static void vrEmuTms9918OutputSprites(VrEmuTms9918* tms9918, uint8_t y, uint8_t 
     yPos += 1;
 
     int16_t pattRow = y - yPos;
-    if (tmsSpriteMag(tms9918))
+    if (spriteMag)
     {
-      pattRow /= 2;
+      pattRow >>= 1;  // this needs to be a shift because -1 / 2 becomes 0. Bad.
     }
 
     /* check if sprite is visible on this line */
-    if (pattRow < 0 || pattRow >= tmsSpriteSize(tms9918))
-      continue;
-
-    vrEmuTms9918Color spriteColor = spriteAttr[SPRITE_ATTR_COLOR] & 0x0f;
-
-    if (spritesShown == 0 && (tms9918->status & STATUS_COL) == 0)
+    if (pattRow < 0 || pattRow >= spriteSize)
     {
-      /* if we're showing the first sprite, clear the bit buffer */
-      memset(rowSpriteBits, 0, TMS9918_PIXELS_X);
+      spriteAttr += SPRITE_ATTR_BYTES;
+      continue;
     }
+
+    const vrEmuTms9918Color spriteColor = spriteAttr[SPRITE_ATTR_COLOR] & 0x0f;
 
     /* have we exceeded the scanline sprite limit? */
     if (++spritesShown > MAX_SCANLINE_SPRITES)
@@ -428,19 +434,20 @@ static void vrEmuTms9918OutputSprites(VrEmuTms9918* tms9918, uint8_t y, uint8_t 
     const int16_t earlyClockOffset = (spriteAttr[SPRITE_ATTR_COLOR] & 0x80) ? -32 : 0;
     const int16_t xPos = (int16_t)(spriteAttr[SPRITE_ATTR_X]) + earlyClockOffset;
 
-    uint8_t pattByte = tms9918->vram[pattOffset];
+    int8_t pattByte = tms9918->vram[pattOffset];
     uint8_t screenBit = 0, pattBit = 0;
 
-    for (int16_t screenX = xPos; screenX < (xPos + spriteSizePx); ++screenX, ++screenBit)
+    int16_t endXPos = xPos + spriteSizePx;
+    if (endXPos >= TMS9918_PIXELS_X)
     {
-      if (screenX >= TMS9918_PIXELS_X)
-      {
-        break;
-      }
+      endXPos = TMS9918_PIXELS_X;
+    }
 
+    for (int16_t screenX = xPos; screenX < endXPos; ++screenX, ++screenBit)
+    {
       if (screenX >= 0)
       {
-        if (pattByte & (0x80 >> pattBit))
+        if (pattByte < 0)
         {
           /* we still process transparent sprites, since
              they're used in 5S and collision checks */
@@ -448,25 +455,26 @@ static void vrEmuTms9918OutputSprites(VrEmuTms9918* tms9918, uint8_t y, uint8_t 
           {
             pixels[screenX] = spriteColor;
           }
-
-          if (rowSpriteBits[screenX])
+          if (tms9918->rowSpriteBits[screenX])
           {
             tms9918->status |= STATUS_COL;
           }
-          rowSpriteBits[screenX] = 1;
+          tms9918->rowSpriteBits[screenX] = 1;
         }
       }
 
       /* next pattern bit if non-magnified or if odd screen bit */
-      if (!tmsSpriteMag(tms9918) || (screenBit & 0x01))
+      if (!spriteMag || (screenBit & 0x01))
       {
-        if (++pattBit == GRAPHICS_CHAR_WIDTH) /* from A -> C or B -> D of large sprite */
+        pattByte<<=1;
+        if (++pattBit == GRAPHICS_CHAR_WIDTH && sprite16) /* from A -> C or B -> D of large sprite */
         {
           pattBit = 0;
           pattByte = tms9918->vram[pattOffset + PATTERN_BYTES * 2];
         }
       }
     }    
+    spriteAttr += SPRITE_ATTR_BYTES;
   }
 
 }
@@ -476,7 +484,7 @@ static void vrEmuTms9918OutputSprites(VrEmuTms9918* tms9918, uint8_t y, uint8_t 
  * ----------------------------------------
  * generate a Graphics I mode scanline
  */
-static void vrEmuTms9918GraphicsIScanLine(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
+static void __time_critical_func(vrEmuTms9918GraphicsIScanLine)(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
   const uint8_t tileY = y >> 3;   /* which name table row (0 - 23) */
   const uint8_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
@@ -491,28 +499,30 @@ static void vrEmuTms9918GraphicsIScanLine(VrEmuTms9918* tms9918, uint8_t y, uint
   for (uint8_t tileX = 0; tileX < GRAPHICS_NUM_COLS; ++tileX)
   {
     const uint8_t pattIdx = tms9918->vram[rowNamesAddr + tileX];    
-    const uint8_t pattByte = patternTable[pattIdx * PATTERN_BYTES + pattRow];
+    uint8_t pattByte = patternTable[pattIdx * PATTERN_BYTES + pattRow];
     const uint8_t colorByte = colorTable[pattIdx / GFXI_COLOR_GROUP_SIZE];
 
     const uint8_t fgColor = tmsFgColor(tms9918, colorByte);
     const uint8_t bgColor = tmsBgColor(tms9918, colorByte);
 
     /* iterate over each bit of this pattern byte */
+    uint8_t pattBit = GRAPHICS_CHAR_WIDTH;
     for (uint8_t pattBit = 0; pattBit < GRAPHICS_CHAR_WIDTH; ++pattBit)
     {
-      const bool pixelBit = (pattByte << pattBit) & 0x80;
-      pixels[tileX * GRAPHICS_CHAR_WIDTH + pattBit] = pixelBit ? fgColor : bgColor;
+      const bool pixelBit = pattByte & 0x80;
+      *(pixels++) = pixelBit ? fgColor : bgColor;
+      pattByte <<= 1;
     }
   }
 
-  vrEmuTms9918OutputSprites(tms9918, y, pixels);
+  vrEmuTms9918OutputSprites(tms9918, y, pixels - TMS9918_PIXELS_X);
 }
 
 /* Function:  vrEmuTms9918GraphicsIIScanLine
  * ----------------------------------------
  * generate a Graphics II mode scanline
  */
-static void vrEmuTms9918GraphicsIIScanLine(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
+static void __time_critical_func(vrEmuTms9918GraphicsIIScanLine)(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
   const uint8_t tileY = y >> 3;   /* which name table row (0 - 23) */
   const uint8_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
@@ -564,7 +574,7 @@ static void vrEmuTms9918GraphicsIIScanLine(VrEmuTms9918* tms9918, uint8_t y, uin
  * ----------------------------------------
  * generate a Text mode scanline
  */
-static void vrEmuTms9918TextScanLine(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
+static void __time_critical_func(vrEmuTms9918TextScanLine)(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
   const uint8_t tileY = y >> 3;   /* which name table row (0 - 23) */
   const uint8_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
@@ -597,7 +607,7 @@ static void vrEmuTms9918TextScanLine(VrEmuTms9918* tms9918, uint8_t y, uint8_t p
  * ----------------------------------------
  * generate a Multicolor mode scanline
  */
-static void vrEmuTms9918MulticolorScanLine(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
+static void __time_critical_func(vrEmuTms9918MulticolorScanLine)(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
   const uint8_t tileY = y >> 3;
   const uint8_t pattRow = ((y / 4) & 0x01) + (tileY & 0x03) * 2;
@@ -622,7 +632,7 @@ static void vrEmuTms9918MulticolorScanLine(VrEmuTms9918* tms9918, uint8_t y, uin
  * ----------------------------------------
  * generate a scanline
  */
-VR_EMU_TMS9918_DLLEXPORT void vrEmuTms9918ScanLine(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
+VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918ScanLine)(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
   if (tms9918 == NULL)
     return;
@@ -705,7 +715,7 @@ uint8_t vrEmuTms9918VramValue(VrEmuTms9918* tms9918, uint16_t addr)
   * check BLANK flag
   */
 VR_EMU_TMS9918_DLLEXPORT
-bool vrEmuTms9918DisplayEnabled(VrEmuTms9918* tms9918)
+bool __not_in_flash_func(vrEmuTms9918DisplayEnabled)(VrEmuTms9918* tms9918)
 {
   if (tms9918 == NULL)
     return false;
