@@ -14,7 +14,13 @@
 #include <memory.h>
 #include <math.h>
 #include <string.h>
-#include "pico/stdlib.h"
+
+#if PICO_BUILD
+  #include "pico/stdlib.h"
+  #define inline __force_inline
+#else
+  #define __time_critical_func(fn) fn
+#endif
 
 #define VRAM_SIZE           (1 << 14) /* 16KB */
 #define VRAM_MASK     (VRAM_SIZE - 1) /* 0x3fff */
@@ -54,13 +60,6 @@
 #define TMS_R1_MODE_TEXT        0x10
 #define TMS_R1_SPRITE_16        0x02
 #define TMS_R1_SPRITE_MAG2      0x01
-
-#if PICO_BUILD
-  #include "pico/stdlib.h"
-  #define inline __force_inline
-#else
-  #define __time_critical_func(fn) fn
-#endif
 
  /* PRIVATE DATA STRUCTURE
   * ---------------------- */
@@ -251,7 +250,6 @@ VR_EMU_TMS9918_DLLEXPORT void vrEmuTms9918Reset(VrEmuTms9918* tms9918)
     tms9918->regWriteStage = 0;
     tms9918->status = 0;
     memset(tms9918->registers, 0, sizeof(tms9918->registers));
-    memset(tms9918->vram, 0, sizeof(tms9918->vram));
 
     /* ram intentionally left in unknown state */
 
