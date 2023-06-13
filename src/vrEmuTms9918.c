@@ -118,7 +118,7 @@ static vrEmuTms9918Mode __time_critical_func(tmsMode)(VrEmuTms9918* tms9918)
  * ----------------------------------------
  * sprite size (8 or 16)
  */
-static inline uint8_t __time_critical_func(tmsSpriteSize)(VrEmuTms9918* tms9918)
+static inline uint8_t tmsSpriteSize(VrEmuTms9918* tms9918)
 {
   return tms9918->registers[TMS_REG_1] & TMS_R1_SPRITE_16 ? 16 : 8;
 }
@@ -127,7 +127,7 @@ static inline uint8_t __time_critical_func(tmsSpriteSize)(VrEmuTms9918* tms9918)
  * ----------------------------------------
  * sprite size (0 = 1x, 1 = 2x)
  */
-static inline bool __time_critical_func(tmsSpriteMag)(VrEmuTms9918* tms9918)
+static inline bool tmsSpriteMag(VrEmuTms9918* tms9918)
 {
   return tms9918->registers[TMS_REG_1] & TMS_R1_SPRITE_MAG2;
 }
@@ -136,7 +136,7 @@ static inline bool __time_critical_func(tmsSpriteMag)(VrEmuTms9918* tms9918)
  * ----------------------------------------
  * name table base address
  */
-static inline uint16_t __time_critical_func(tmsNameTableAddr)(VrEmuTms9918* tms9918)
+static inline uint16_t tmsNameTableAddr(VrEmuTms9918* tms9918)
 {
   return (tms9918->registers[TMS_REG_NAME_TABLE] & 0x0f) << 10;
 }
@@ -145,7 +145,7 @@ static inline uint16_t __time_critical_func(tmsNameTableAddr)(VrEmuTms9918* tms9
  * ----------------------------------------
  * color table base address
  */
-static inline uint16_t __time_critical_func(tmsColorTableAddr)(VrEmuTms9918* tms9918)
+static inline uint16_t tmsColorTableAddr(VrEmuTms9918* tms9918)
 {
   const uint8_t mask = (tms9918->mode == TMS_MODE_GRAPHICS_II) ? 0x80 : 0xff;
 
@@ -156,7 +156,7 @@ static inline uint16_t __time_critical_func(tmsColorTableAddr)(VrEmuTms9918* tms
  * ----------------------------------------
  * pattern table base address
  */
-static inline uint16_t __time_critical_func(tmsPatternTableAddr)(VrEmuTms9918* tms9918)
+static inline uint16_t tmsPatternTableAddr(VrEmuTms9918* tms9918)
 {
   const uint8_t mask = (tms9918->mode == TMS_MODE_GRAPHICS_II) ? 0x04 : 0x07;
 
@@ -167,7 +167,7 @@ static inline uint16_t __time_critical_func(tmsPatternTableAddr)(VrEmuTms9918* t
  * ----------------------------------------
  * sprite attribute table base address
  */
-static inline uint16_t __time_critical_func(tmsSpriteAttrTableAddr)(VrEmuTms9918* tms9918)
+static inline uint16_t tmsSpriteAttrTableAddr(VrEmuTms9918* tms9918)
 {
   return (tms9918->registers[TMS_REG_SPRITE_ATTR_TABLE] & 0x7f) << 7;
 }
@@ -176,7 +176,7 @@ static inline uint16_t __time_critical_func(tmsSpriteAttrTableAddr)(VrEmuTms9918
  * ----------------------------------------
  * sprite pattern table base address
  */
-static inline uint16_t __time_critical_func(tmsSpritePatternTableAddr)(VrEmuTms9918* tms9918)
+static inline uint16_t tmsSpritePatternTableAddr(VrEmuTms9918* tms9918)
 {
   return (tms9918->registers[TMS_REG_SPRITE_PATT_TABLE] & 0x07) << 11;
 }
@@ -185,7 +185,7 @@ static inline uint16_t __time_critical_func(tmsSpritePatternTableAddr)(VrEmuTms9
  * ----------------------------------------
  * background color
  */
-static inline vrEmuTms9918Color __time_critical_func(tmsMainBgColor)(VrEmuTms9918* tms9918)
+static inline vrEmuTms9918Color tmsMainBgColor(VrEmuTms9918* tms9918)
 {
   return (vrEmuTms9918Color)((vrEmuTms9918DisplayEnabled(tms9918) 
             ? tms9918->registers[TMS_REG_FG_BG_COLOR]
@@ -196,7 +196,7 @@ static inline vrEmuTms9918Color __time_critical_func(tmsMainBgColor)(VrEmuTms991
  * ----------------------------------------
  * foreground color
  */
-static inline vrEmuTms9918Color __time_critical_func(tmsMainFgColor)(VrEmuTms9918* tms9918)
+static inline vrEmuTms9918Color tmsMainFgColor(VrEmuTms9918* tms9918)
 {
   const vrEmuTms9918Color c = (vrEmuTms9918Color)(tms9918->registers[TMS_REG_FG_BG_COLOR] >> 4);
   return c == TMS_TRANSPARENT ? tmsMainBgColor(tms9918) : c;
@@ -206,7 +206,7 @@ static inline vrEmuTms9918Color __time_critical_func(tmsMainFgColor)(VrEmuTms991
  * ----------------------------------------
  * foreground color
  */
-static inline vrEmuTms9918Color __time_critical_func(tmsFgColor)(VrEmuTms9918* tms9918, uint8_t colorByte)
+static inline vrEmuTms9918Color tmsFgColor(VrEmuTms9918* tms9918, uint8_t colorByte)
 {
   const vrEmuTms9918Color c = (vrEmuTms9918Color)(colorByte >> 4);
   return c == TMS_TRANSPARENT ? tmsMainBgColor(tms9918) : c;
@@ -216,7 +216,7 @@ static inline vrEmuTms9918Color __time_critical_func(tmsFgColor)(VrEmuTms9918* t
  * ----------------------------------------
  * background color
  */
-static inline vrEmuTms9918Color __time_critical_func(tmsBgColor)(VrEmuTms9918* tms9918, uint8_t colorByte)
+static inline vrEmuTms9918Color tmsBgColor(VrEmuTms9918* tms9918, uint8_t colorByte)
 {
   const vrEmuTms9918Color c = (vrEmuTms9918Color)(colorByte & 0x0f);
   return c == TMS_TRANSPARENT ? tmsMainBgColor(tms9918) : c;
