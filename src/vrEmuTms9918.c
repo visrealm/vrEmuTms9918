@@ -362,7 +362,7 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t vrEmuTms9918ReadDataNoInc(VrEmuTms9918* tms9918
  * ----------------------------------------
  * Output Sprites to a scanline
  */
-void __time_critical_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
+static void __time_critical_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
   const bool spriteMag = tmsSpriteMag(tms9918);
   const bool sprite16 = tmsSpriteSize(tms9918) == 16;
@@ -484,7 +484,7 @@ void __time_critical_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms9918, uint
  * ----------------------------------------
  * generate a Graphics I mode scanline
  */
-void __time_critical_func(vrEmuTms9918GraphicsIScanLine)(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
+static void __time_critical_func(vrEmuTms9918GraphicsIScanLine)(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
   const uint8_t tileY = y >> 3;   /* which name table row (0 - 23) */
   const uint8_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
@@ -522,7 +522,7 @@ void __time_critical_func(vrEmuTms9918GraphicsIScanLine)(VrEmuTms9918* tms9918, 
  * ----------------------------------------
  * generate a Graphics II mode scanline
  */
-void __time_critical_func(vrEmuTms9918GraphicsIIScanLine)(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
+static void __time_critical_func(vrEmuTms9918GraphicsIIScanLine)(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
   const uint8_t tileY = y >> 3;   /* which name table row (0 - 23) */
   const uint8_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
