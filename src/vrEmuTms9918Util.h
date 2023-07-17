@@ -39,16 +39,22 @@
 #define TMS_R1_SPRITE_MAG1        0x00
 #define TMS_R1_SPRITE_MAG2        0x01
 
+#define TMS_DEFAULT_VRAM_NAME_ADDRESS          0x3800
+#define TMS_DEFAULT_VRAM_COLOR_ADDRESS         0x0000
+#define TMS_DEFAULT_VRAM_PATT_ADDRESS          0x2000
+#define TMS_DEFAULT_VRAM_SPRITE_ATTR_ADDRESS   0x3B00
+#define TMS_DEFAULT_VRAM_SPRITE_PATT_ADDRESS   0x1800
+
  /*
   * TMS9918 palette (RGBA)
   */
-VR_EMU_TMS9918_DLLEXPORT 
+VR_EMU_TMS9918_DLLEXPORT
 const uint32_t vrEmuTms9918Palette[];
 
-/* 
+/*
  * Write a register value
  */
-inline static void vrEmuTms9918WriteRegisterValue(VrEmuTms9918 *tms9918, vrEmuTms9918Register reg, uint8_t value)
+inline static void vrEmuTms9918WriteRegisterValue(VrEmuTms9918* tms9918, vrEmuTms9918Register reg, uint8_t value)
 {
   vrEmuTms9918WriteAddr(tms9918, value);
   vrEmuTms9918WriteAddr(tms9918, 0x80 | (uint8_t)reg);
@@ -74,7 +80,7 @@ inline static void vrEmuTms9918SetAddressWrite(VrEmuTms9918* tms9918, uint16_t a
 /*
  * Write a series of bytes to the VRAM
  */
-inline static void vrEmuTms9918WriteBytes(VrEmuTms9918* tms9918, const uint8_t *bytes, size_t numBytes)
+inline static void vrEmuTms9918WriteBytes(VrEmuTms9918* tms9918, const uint8_t* bytes, size_t numBytes)
 {
   for (size_t i = 0; i < numBytes; ++i)
   {
@@ -83,9 +89,21 @@ inline static void vrEmuTms9918WriteBytes(VrEmuTms9918* tms9918, const uint8_t *
 }
 
 /*
+ * Write a series of bytes to the VRAM
+ */
+inline static void vrEmuTms9918WriteByteRpt(VrEmuTms9918* tms9918, uint8_t byte, size_t rpt)
+{
+  for (size_t i = 0; i < rpt; ++i)
+  {
+    vrEmuTms9918WriteData(tms9918, byte);
+  }
+}
+
+
+/*
  * Write a series of chars to the VRAM
  */
-inline static void vrEmuTms9918WriteString(VrEmuTms9918* tms9918, const char *str)
+inline static void vrEmuTms9918WriteString(VrEmuTms9918* tms9918, const char* str)
 {
   size_t len = strlen(str);
   for (size_t i = 0; i < len; ++i)
@@ -150,5 +168,11 @@ inline static void vrEmuTms9918SetFgBgColor(VrEmuTms9918* tms9918, vrEmuTms9918C
   vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_FG_BG_COLOR, vrEmuTms9918FgBgColor(fg, bg));
 }
 
+
+/*
+ * Initialise for Graphics I mode
+ */
+VR_EMU_TMS9918_DLLEXPORT
+void vrEmuTms9918InitialiseGfxI(VrEmuTms9918* tms9918);
 
 #endif // _VR_EMU_TMS9918_UTIL_H_

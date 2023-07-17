@@ -12,7 +12,7 @@
 #include "vrEmuTms9918Util.h"
 
  /* tms9918 palette */
-VR_EMU_TMS9918_DLLEXPORT 
+VR_EMU_TMS9918_DLLEXPORT_C
 const uint32_t vrEmuTms9918Palette[] = {
   0x00000000, /* transparent */
   0x000000ff, /* black */
@@ -31,3 +31,20 @@ const uint32_t vrEmuTms9918Palette[] = {
   0xccccccff, /* grey */
   0xffffffff  /* white */
 };
+
+
+VR_EMU_TMS9918_DLLEXPORT_C
+void vrEmuTms9918InitialiseGfxI(VrEmuTms9918* tms9918)
+{
+  vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_0, TMS_R0_EXT_VDP_DISABLE | TMS_R0_MODE_GRAPHICS_I);
+  vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_1, TMS_R1_RAM_16K | TMS_R1_MODE_GRAPHICS_I | TMS_R1_RAM_16K | TMS_R1_DISP_ACTIVE | TMS_R1_INT_ENABLE);
+  vrEmuTms9918SetNameTableAddr(tms9918, TMS_DEFAULT_VRAM_NAME_ADDRESS);
+  vrEmuTms9918SetColorTableAddr(tms9918, TMS_DEFAULT_VRAM_COLOR_ADDRESS);
+  vrEmuTms9918SetPatternTableAddr(tms9918, TMS_DEFAULT_VRAM_PATT_ADDRESS);
+  vrEmuTms9918SetSpriteAttrTableAddr(tms9918, TMS_DEFAULT_VRAM_SPRITE_ATTR_ADDRESS);
+  vrEmuTms9918SetSpritePattTableAddr(tms9918, TMS_DEFAULT_VRAM_SPRITE_PATT_ADDRESS);
+  vrEmuTms9918SetFgBgColor(tms9918, TMS_BLACK, TMS_CYAN);
+
+  vrEmuTms9918SetAddressWrite(tms9918, 0x0000);
+  vrEmuTms9918WriteByteRpt(tms9918, 0x00, 0x4000);
+}

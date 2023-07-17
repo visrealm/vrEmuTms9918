@@ -22,17 +22,21 @@
 
 #if VR_TMS9918_EMU_COMPILING_DLL
   #define VR_EMU_TMS9918_DLLEXPORT __declspec(dllexport)
+  #define VR_EMU_TMS9918_DLLEXPORT_C __declspec(dllexport)
 #elif VR_TMS9918_EMU_STATIC
   #ifdef __cplusplus
     #define VR_EMU_TMS9918_DLLEXPORT extern "C"
   #else
     #define VR_EMU_TMS9918_DLLEXPORT extern
   #endif
+#define VR_EMU_TMS9918_DLLEXPORT_C
 #elif __EMSCRIPTEN__
   #include <emscripten.h>
   #define VR_EMU_TMS9918_DLLEXPORT EMSCRIPTEN_KEEPALIVE
+  #define VR_EMU_TMS9918_DLLEXPORT_C EMSCRIPTEN_KEEPALIVE
 #else
-  #define VR_EMU_TMS9918_DLLEXPORT __declspec(dllimport)
+#define VR_EMU_TMS9918_DLLEXPORT __declspec(dllimport)
+#define VR_EMU_TMS9918_DLLEXPORT_C __declspec(dllimport)
 #endif
 
 #include <stdint.h>
