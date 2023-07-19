@@ -175,4 +175,10 @@ inline static void vrEmuTms9918SetFgBgColor(VrEmuTms9918* tms9918, vrEmuTms9918C
 VR_EMU_TMS9918_DLLEXPORT
 void vrEmuTms9918InitialiseGfxI(VrEmuTms9918* tms9918);
 
+/*
+ * Initialise for Graphics II mode
+ */
+VR_EMU_TMS9918_DLLEXPORT
+void vrEmuTms9918InitialiseGfxII(VrEmuTms9918* tms9918);
+
 #endif // _VR_EMU_TMS9918_UTIL_H_
