@@ -205,4 +205,12 @@ VR_EMU_TMS9918_DLLEXPORT
 bool vrEmuTms9918DisplayEnabled(VrEmuTms9918* tms9918);
 
 
+/* Function:  vrEmuTms9918DisplayMode
+  * --------------------
+  * current display mode
+  */
+VR_EMU_TMS9918_DLLEXPORT
+vrEmuTms9918Mode vrEmuTms9918DisplayMode(VrEmuTms9918* tms9918);
+
+
 #endif // _VR_EMU_TMS9918_H_

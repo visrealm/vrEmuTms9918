@@ -721,3 +721,13 @@ bool vrEmuTms9918DisplayEnabled(VrEmuTms9918* tms9918)
 
   return tms9918->registers[TMS_REG_1] & TMS_R1_DISP_ACTIVE;
 }
+
+/* Function:  vrEmuTms9918DisplayMode
+  * --------------------
+  * current display mode
+  */
+VR_EMU_TMS9918_DLLEXPORT
+vrEmuTms9918Mode vrEmuTms9918DisplayMode(VrEmuTms9918* tms9918)
+{
+  return tms9918->mode;
+}
