@@ -229,7 +229,7 @@ static inline vrEmuTms9918Color tmsBgColor(VrEmuTms9918* tms9918, uint8_t colorB
  */
 VR_EMU_TMS9918_DLLEXPORT_C VrEmuTms9918* vrEmuTms9918New()
 {
-  VrEmuTms9918* tms9918 = (VrEmuTms9918*)aligned_alloc(sizeof(VrEmuTms9918), sizeof(int));
+  VrEmuTms9918* tms9918 = (VrEmuTms9918*)malloc(sizeof(VrEmuTms9918));
   if (tms9918 != NULL)
   {
     vrEmuTms9918Reset(tms9918);
@@ -506,7 +506,6 @@ static void __time_critical_func(vrEmuTms9918GraphicsIScanLine)(VrEmuTms9918* tm
     const uint8_t bgColor = tmsBgColor(tms9918, colorByte);
 
     /* iterate over each bit of this pattern byte */
-    uint8_t pattBit = GRAPHICS_CHAR_WIDTH;
     for (uint8_t pattBit = 0; pattBit < GRAPHICS_CHAR_WIDTH; ++pattBit)
     {
       const bool pixelBit = pattByte & 0x80;
