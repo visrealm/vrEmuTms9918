@@ -415,6 +415,15 @@ static void __time_critical_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms991
       continue;
     }
 
+    if (spritesShown == 0)
+    {
+      int *rsbInt = (int*)tms9918->rowSpriteBits;
+      for (int i = 0; i < sizeof(tms9918->rowSpriteBits) / sizeof(int); ++i)
+      {
+        *rsbInt++ = 0;
+      }
+    }
+
     const vrEmuTms9918Color spriteColor = spriteAttr[SPRITE_ATTR_COLOR] & 0x0f;
 
     /* have we exceeded the scanline sprite limit? */
@@ -449,17 +458,21 @@ static void __time_critical_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms991
       {
         if (pattByte < 0)
         {
-          /* we still process transparent sprites, since
-             they're used in 5S and collision checks */
-          if (spriteColor != TMS_TRANSPARENT)
+          if (spriteColor != TMS_TRANSPARENT && tms9918->rowSpriteBits[screenX] < 2)
           {
             pixels[screenX] = spriteColor;
           }
+
+          /* we still process transparent sprites, since
+             they're used in 5S and collision checks */
           if (tms9918->rowSpriteBits[screenX])
           {
             tms9918->status |= STATUS_COL;
           }
-          tms9918->rowSpriteBits[screenX] = 1;
+          else
+          {
+            tms9918->rowSpriteBits[screenX] = spriteColor + 1;
+          }
         }
       }
 
