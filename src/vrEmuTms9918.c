@@ -424,7 +424,7 @@ static void __time_critical_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms991
       }
     }
 
-    const vrEmuTms9918Color spriteColor = spriteAttr[SPRITE_ATTR_COLOR] & 0x0f;
+    const uint8_t spriteColor = spriteAttr[SPRITE_ATTR_COLOR] & 0x0f;
 
     /* have we exceeded the scanline sprite limit? */
     if (++spritesShown > MAX_SCANLINE_SPRITES)
