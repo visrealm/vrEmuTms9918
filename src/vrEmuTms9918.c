@@ -560,26 +560,24 @@ static void __time_critical_func(vrEmuTms9918GraphicsIIScanLine)(VrEmuTms9918* t
   const uint16_t rowNamesAddr = tmsNameTableAddr(tms9918) + tileY * GRAPHICS_NUM_COLS;
 
   /* the datasheet says the lower bits of the color and pattern tables must
-     be all 1's for graphics II mode. when they're not, it seems the page
-     offset becomes 0 and only the lower 3 bits of pattern name is used */
-  const bool invalidGfxII = (tms9918->registers[TMS_REG_PATTERN_TABLE] & 0x03) != 0x03 ||
-    (tms9918->registers[TMS_REG_COLOR_TABLE] & 0x7f) != 0x7f;
+     be all 1's for graphics II mode. however, the lowest 2 bits of the
+     pattern address are used to determine if pages 2 & 3 come from page 0
+     or not. Similarly, the lowest 6 bits of the color table register are
+     used as an and mask with the nametable  index */
+  const uint8_t nameMask = ((tms9918->registers[TMS_REG_COLOR_TABLE] & 0x7f) << 3) | 0x07;
 
-  const uint16_t pageThird = (tileY & 0x18) >> 3; /* which page? 0-2 */
-  const uint16_t pageOffset = (uint16_t)(invalidGfxII ? 0 : pageThird << 11); /* offset (0, 0x800 or 0x1000) */
+  const uint16_t pageThird = ((tileY & 0x18) >> 3)
+                              & (tms9918->registers[TMS_REG_PATTERN_TABLE] & 0x03); /* which page? 0-2 */
+  const uint16_t pageOffset = pageThird << 11; /* offset (0, 0x800 or 0x1000) */
 
   const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918) + pageOffset;
-  const uint8_t* colorTable = tms9918->vram + tmsColorTableAddr(tms9918) + pageOffset;
+  const uint8_t* colorTable = tms9918->vram + tmsColorTableAddr(tms9918) + (pageOffset
+    & ((tms9918->registers[TMS_REG_COLOR_TABLE] & 0x60) >> 5));
 
   /* iterate over each tile in this row */
   for (uint8_t tileX = 0; tileX < GRAPHICS_NUM_COLS; ++tileX)
   {
-    uint8_t pattIdx = tms9918->vram[rowNamesAddr + tileX];
-
-    if (invalidGfxII)
-    {
-      pattIdx &= 0x07;
-    }
+    uint8_t pattIdx = tms9918->vram[rowNamesAddr + tileX] & nameMask;
 
     const size_t pattRowOffset = pattIdx * PATTERN_BYTES + pattRow;
     const uint8_t pattByte = patternTable[pattRowOffset];
