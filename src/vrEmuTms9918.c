@@ -572,7 +572,7 @@ static void __time_critical_func(vrEmuTms9918GraphicsIIScanLine)(VrEmuTms9918* t
 
   const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918) + pageOffset;
   const uint8_t* colorTable = tms9918->vram + tmsColorTableAddr(tms9918) + (pageOffset
-    & ((tms9918->registers[TMS_REG_COLOR_TABLE] & 0x60) >> 5));
+    & ((tms9918->registers[TMS_REG_COLOR_TABLE] & 0x60) << 6));
 
   /* iterate over each tile in this row */
   for (uint8_t tileX = 0; tileX < GRAPHICS_NUM_COLS; ++tileX)
