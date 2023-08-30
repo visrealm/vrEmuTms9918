@@ -77,6 +77,9 @@ struct vrEmuTMS9918_s
   /* address or register write stage (0 or 1) */
   uint8_t regWriteStage;
 
+  /* buffered value */
+  uint8_t readAheadBuffer;
+
   /* current display mode */
   vrEmuTms9918Mode mode;
 
@@ -249,6 +252,7 @@ VR_EMU_TMS9918_DLLEXPORT_C void vrEmuTms9918Reset(VrEmuTms9918* tms9918)
     tms9918->currentAddress = 0;
     tms9918->regWriteStage = 0;
     tms9918->status = 0;
+    tms9918->readAheadBuffer = 0;
     memset(tms9918->registers, 0, sizeof(tms9918->registers));
 
     /* ram intentionally left in unknown state */
@@ -302,6 +306,10 @@ VR_EMU_TMS9918_DLLEXPORT_C void vrEmuTms9918WriteAddr(VrEmuTms9918* tms9918, uin
     else /* address */
     {
       tms9918->currentAddress |= ((data & 0x3f) << 8);
+      if ((data & 0x40) == 0)
+      {
+        tms9918->readAheadBuffer = tms9918->vram[(tms9918->currentAddress++) & VRAM_MASK];
+      }
     }
     tms9918->regWriteStage = 0;
   }
@@ -332,6 +340,8 @@ VR_EMU_TMS9918_DLLEXPORT_C void vrEmuTms9918WriteData(VrEmuTms9918* tms9918, uin
 {
   if (tms9918 == NULL) return;
 
+  tms9918->regWriteStage = 0;
+  tms9918->readAheadBuffer = data;
   tms9918->vram[(tms9918->currentAddress++) & VRAM_MASK] = data;
 }
 
@@ -344,7 +354,10 @@ VR_EMU_TMS9918_DLLEXPORT_C uint8_t vrEmuTms9918ReadData(VrEmuTms9918* tms9918)
 {
   if (tms9918 == NULL) return 0;
 
-  return tms9918->vram[(tms9918->currentAddress++) & VRAM_MASK];
+  tms9918->regWriteStage = 0;
+  uint8_t currentValue = tms9918->readAheadBuffer;
+  tms9918->readAheadBuffer = tms9918->vram[(tms9918->currentAddress++) & VRAM_MASK];
+  return currentValue;
 }
 
 /* Function:  vrEmuTms9918ReadDataNoInc
@@ -355,7 +368,7 @@ VR_EMU_TMS9918_DLLEXPORT_C uint8_t vrEmuTms9918ReadDataNoInc(VrEmuTms9918* tms99
 {
   if (tms9918 == NULL) return 0;
 
-  return tms9918->vram[tms9918->currentAddress & VRAM_MASK];
+  return tms9918->readAheadBuffer;
 }
 
 /* Function:  vrEmuTms9918OutputSprites
