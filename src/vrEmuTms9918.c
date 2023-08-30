@@ -77,6 +77,9 @@ struct vrEmuTMS9918_s
   /* address or register write stage (0 or 1) */
   uint8_t regWriteStage;
 
+  /* holds first stage of write to address/register port */
+  uint8_t regWriteStage0Value;
+
   /* buffered value */
   uint8_t readAheadBuffer;
 
@@ -249,6 +252,7 @@ VR_EMU_TMS9918_DLLEXPORT_C void vrEmuTms9918Reset(VrEmuTms9918* tms9918)
 {
   if (tms9918)
   {
+    tms9918->regWriteStage0Value = 0;
     tms9918->currentAddress = 0;
     tms9918->regWriteStage = 0;
     tms9918->status = 0;
@@ -290,7 +294,7 @@ VR_EMU_TMS9918_DLLEXPORT_C void vrEmuTms9918WriteAddr(VrEmuTms9918* tms9918, uin
   {
     /* first stage byte - either an address LSB or a register value */
 
-    tms9918->currentAddress = data;
+    tms9918->regWriteStage0Value = data;
     tms9918->regWriteStage = 1;
   }
   else
@@ -299,13 +303,13 @@ VR_EMU_TMS9918_DLLEXPORT_C void vrEmuTms9918WriteAddr(VrEmuTms9918* tms9918, uin
 
     if (data & 0x80) /* register */
     {
-      tms9918->registers[data & 0x07] = tms9918->currentAddress & 0xff;
+      tms9918->registers[data & 0x07] = tms9918->regWriteStage0Value;
 
       tms9918->mode = tmsMode(tms9918);
     }
     else /* address */
     {
-      tms9918->currentAddress |= ((data & 0x3f) << 8);
+      tms9918->currentAddress = tms9918->regWriteStage0Value | ((data & 0x3f) << 8);
       if ((data & 0x40) == 0)
       {
         tms9918->readAheadBuffer = tms9918->vram[(tms9918->currentAddress++) & VRAM_MASK];
