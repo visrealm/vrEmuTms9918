@@ -193,9 +193,7 @@ static inline uint16_t tmsSpritePatternTableAddr(VrEmuTms9918* tms9918)
  */
 static inline vrEmuTms9918Color tmsMainBgColor(VrEmuTms9918* tms9918)
 {
-  return (vrEmuTms9918Color)((vrEmuTms9918DisplayEnabled(tms9918)
-    ? tms9918->registers[TMS_REG_FG_BG_COLOR]
-    : TMS_BLACK) & 0x0f);
+  return tms9918->registers[TMS_REG_FG_BG_COLOR] & 0x0f;
 }
 
 /* Function:  tmsFgColor
