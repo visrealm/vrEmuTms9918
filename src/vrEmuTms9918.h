@@ -22,7 +22,13 @@
 
 #if __EMSCRIPTEN__
 #include <emscripten.h>
-#define VR_EMU_TMS9918_DLLEXPORT EMSCRIPTEN_KEEPALIVE
+  #ifdef __cplusplus
+  #define VR_EMU_TMS9918_DLLEXPORT EMSCRIPTEN_KEEPALIVE extern "C"
+  #define VR_EMU_TMS9918_DLLEXPORT_CONST extern "C"
+#else
+  #define VR_EMU_TMS9918_DLLEXPORT EMSCRIPTEN_KEEPALIVE extern
+  #define VR_EMU_TMS9918_DLLEXPORT_CONST extern
+#endif
 #elif VR_TMS9918_EMU_COMPILING_DLL
 #define VR_EMU_TMS9918_DLLEXPORT __declspec(dllexport)
 #elif defined WIN32 && !defined VR_EMU_TMS9918_STATIC
@@ -33,6 +39,10 @@
 #else
 #define VR_EMU_TMS9918_DLLEXPORT extern
 #endif
+#endif
+
+#ifndef VR_EMU_TMS9918_DLLEXPORT_CONST
+#define VR_EMU_TMS9918_DLLEXPORT_CONST VR_EMU_TMS9918_DLLEXPORT
 #endif
 
 #include <stdint.h>

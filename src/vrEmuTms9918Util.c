@@ -11,11 +11,19 @@
 
 #include "vrEmuTms9918Util.h"
 
+#ifndef WIN32
+#undef VR_EMU_TMS9918_DLLEXPORT
+#define VR_EMU_TMS9918_DLLEXPORT
+#endif
+
+#undef VR_EMU_TMS9918_DLLEXPORT_CONST
+#define VR_EMU_TMS9918_DLLEXPORT_CONST
+
+
 #define LAST_SPRITE_YPOS        0xD0
 
  /* tms9918 palette */
-VR_EMU_TMS9918_DLLEXPORT
-uint32_t vrEmuTms9918Palette[] = {
+VR_EMU_TMS9918_DLLEXPORT_CONST uint32_t vrEmuTms9918Palette[] = {
   0x00000000, /* transparent */
   0x000000ff, /* black */
   0x21c942ff, /* medium green */

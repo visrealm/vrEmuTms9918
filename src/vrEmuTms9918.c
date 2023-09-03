@@ -22,6 +22,12 @@
 #define __time_critical_func(fn) fn
 #endif
 
+#ifndef WIN32
+#undef VR_EMU_TMS9918_DLLEXPORT
+#define VR_EMU_TMS9918_DLLEXPORT
+#endif
+
+
 #define VRAM_SIZE           (1 << 14) /* 16KB */
 #define VRAM_MASK     (VRAM_SIZE - 1) /* 0x3fff */
 
