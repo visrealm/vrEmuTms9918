@@ -14,7 +14,7 @@
 #define LAST_SPRITE_YPOS        0xD0
 
  /* tms9918 palette */
-VR_EMU_TMS9918_DLLEXPORT_C
+VR_EMU_TMS9918_DLLEXPORT
 const uint32_t vrEmuTms9918Palette[] = {
   0x00000000, /* transparent */
   0x000000ff, /* black */
@@ -49,7 +49,7 @@ static void clearTmsRam(VrEmuTms9918* tms9918)
   }
 }
 
-VR_EMU_TMS9918_DLLEXPORT_C
+VR_EMU_TMS9918_DLLEXPORT
 void vrEmuTms9918InitialiseGfxI(VrEmuTms9918* tms9918)
 {
   vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_0, TMS_R0_EXT_VDP_DISABLE | TMS_R0_MODE_GRAPHICS_I);
@@ -66,7 +66,7 @@ void vrEmuTms9918InitialiseGfxI(VrEmuTms9918* tms9918)
 
 
 
-VR_EMU_TMS9918_DLLEXPORT_C
+VR_EMU_TMS9918_DLLEXPORT
 void vrEmuTms9918InitialiseGfxII(VrEmuTms9918* tms9918)
 {
   vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_0, TMS_R0_EXT_VDP_DISABLE | TMS_R0_MODE_GRAPHICS_II);

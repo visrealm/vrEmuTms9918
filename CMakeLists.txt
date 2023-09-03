@@ -1,18 +1,18 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.22)
 
-set(LIBRARY vrEmuTms9918)
-
-project (${LIBRARY} C)
 
 set(CMAKE_C_STANDARD 11)
 
-add_library(${LIBRARY} src/vrEmuTms9918.c src/vrEmuTms9918Util.c)
+option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
 
-target_compile_definitions(${LIBRARY} PUBLIC VR_TMS9918_EMU_STATIC)
+project(vrEmuTms9918)
 
-target_include_directories (${LIBRARY} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
 
-if (PICO_SDK_PATH)
-  target_compile_definitions(${LIBRARY} PRIVATE PICO_BUILD)
-  target_link_libraries(${LIBRARY} PRIVATE pico_stdlib) 
+if (NOT BUILD_SHARED_LIBS)
+ add_definitions(-DVR_EMU_TMS9918_STATIC)
 endif()
+
+include(CTest)
+
+add_subdirectory(src)

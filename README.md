@@ -1,6 +1,6 @@
 # vrEmuTms9918 - TMS9918 / TMS9918A / TMS9929A VDP Emulator
 
-![build-win64-badge](https://github.com/visrealm/vrEmuTms9918/actions/workflows/build-win64.yml/badge.svg)
+<a href="https://github.com/visrealm/vrEmuTms9918/actions/workflows/cmake-multi-platform.yml"><img src="https://github.com/visrealm/vrEmuTms9918/actions/workflows/cmake-multi-platform.yml/badge.svg"/></a>
 
 TMS9918 emulator. Core engine written in C99. Zero dependencies.
 

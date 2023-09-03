@@ -20,23 +20,19 @@
  * VR_6502_EMU_STATIC:           When linking vrEmu6502 statically in your executable
  */
 
-#if VR_TMS9918_EMU_COMPILING_DLL
-  #define VR_EMU_TMS9918_DLLEXPORT __declspec(dllexport)
-  #define VR_EMU_TMS9918_DLLEXPORT_C __declspec(dllexport)
-#elif VR_TMS9918_EMU_STATIC
-  #ifdef __cplusplus
-    #define VR_EMU_TMS9918_DLLEXPORT extern "C"
-  #else
-    #define VR_EMU_TMS9918_DLLEXPORT extern
-  #endif
-#define VR_EMU_TMS9918_DLLEXPORT_C
-#elif __EMSCRIPTEN__
-  #include <emscripten.h>
-  #define VR_EMU_TMS9918_DLLEXPORT EMSCRIPTEN_KEEPALIVE
-  #define VR_EMU_TMS9918_DLLEXPORT_C EMSCRIPTEN_KEEPALIVE
-#else
+#if __EMSCRIPTEN__
+#include <emscripten.h>
+#define VR_EMU_TMS9918_DLLEXPORT EMSCRIPTEN_KEEPALIVE
+#elif VR_TMS9918_EMU_COMPILING_DLL
+#define VR_EMU_TMS9918_DLLEXPORT __declspec(dllexport)
+#elif defined WIN32 && !defined VR_EMU_TMS9918_STATIC
 #define VR_EMU_TMS9918_DLLEXPORT __declspec(dllimport)
-#define VR_EMU_TMS9918_DLLEXPORT_C __declspec(dllimport)
+#else
+#ifdef __cplusplus
+#define VR_EMU_TMS9918_DLLEXPORT extern "C"
+#else
+#define VR_EMU_TMS9918_DLLEXPORT extern
+#endif
 #endif
 
 #include <stdint.h>

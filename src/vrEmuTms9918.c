@@ -231,7 +231,7 @@ static inline vrEmuTms9918Color tmsBgColor(VrEmuTms9918* tms9918, uint8_t colorB
  * ----------------------------------------
  * create a new TMS9918
  */
-VR_EMU_TMS9918_DLLEXPORT_C VrEmuTms9918* vrEmuTms9918New()
+VR_EMU_TMS9918_DLLEXPORT VrEmuTms9918* vrEmuTms9918New()
 {
   VrEmuTms9918* tms9918 = (VrEmuTms9918*)malloc(sizeof(VrEmuTms9918));
   if (tms9918 != NULL)
@@ -246,7 +246,7 @@ VR_EMU_TMS9918_DLLEXPORT_C VrEmuTms9918* vrEmuTms9918New()
  * ----------------------------------------
  * reset the new TMS9918
  */
-VR_EMU_TMS9918_DLLEXPORT_C void vrEmuTms9918Reset(VrEmuTms9918* tms9918)
+VR_EMU_TMS9918_DLLEXPORT void vrEmuTms9918Reset(VrEmuTms9918* tms9918)
 {
   if (tms9918)
   {
@@ -270,7 +270,7 @@ VR_EMU_TMS9918_DLLEXPORT_C void vrEmuTms9918Reset(VrEmuTms9918* tms9918)
  *
  * tms9918: tms9918 object to destroy / clean up
  */
-VR_EMU_TMS9918_DLLEXPORT_C void vrEmuTms9918Destroy(VrEmuTms9918* tms9918)
+VR_EMU_TMS9918_DLLEXPORT void vrEmuTms9918Destroy(VrEmuTms9918* tms9918)
 {
   if (tms9918)
   {
@@ -284,7 +284,7 @@ VR_EMU_TMS9918_DLLEXPORT_C void vrEmuTms9918Destroy(VrEmuTms9918* tms9918)
  *
  * data: the data (DB0 -> DB7) to send
  */
-VR_EMU_TMS9918_DLLEXPORT_C void vrEmuTms9918WriteAddr(VrEmuTms9918* tms9918, uint8_t data)
+VR_EMU_TMS9918_DLLEXPORT void vrEmuTms9918WriteAddr(VrEmuTms9918* tms9918, uint8_t data)
 {
   if (tms9918 == NULL) return;
 
@@ -321,7 +321,7 @@ VR_EMU_TMS9918_DLLEXPORT_C void vrEmuTms9918WriteAddr(VrEmuTms9918* tms9918, uin
  * ----------------------------------------
  * read from the status register
  */
-VR_EMU_TMS9918_DLLEXPORT_C uint8_t vrEmuTms9918ReadStatus(VrEmuTms9918* tms9918)
+VR_EMU_TMS9918_DLLEXPORT uint8_t vrEmuTms9918ReadStatus(VrEmuTms9918* tms9918)
 {
   if (tms9918 == NULL) return 0;
 
@@ -338,7 +338,7 @@ VR_EMU_TMS9918_DLLEXPORT_C uint8_t vrEmuTms9918ReadStatus(VrEmuTms9918* tms9918)
  *
  * data: the data (DB0 -> DB7) to send
  */
-VR_EMU_TMS9918_DLLEXPORT_C void vrEmuTms9918WriteData(VrEmuTms9918* tms9918, uint8_t data)
+VR_EMU_TMS9918_DLLEXPORT void vrEmuTms9918WriteData(VrEmuTms9918* tms9918, uint8_t data)
 {
   if (tms9918 == NULL) return;
 
@@ -352,7 +352,7 @@ VR_EMU_TMS9918_DLLEXPORT_C void vrEmuTms9918WriteData(VrEmuTms9918* tms9918, uin
  * ----------------------------------------
  * read data (mode = 0) from the tms9918
  */
-VR_EMU_TMS9918_DLLEXPORT_C uint8_t vrEmuTms9918ReadData(VrEmuTms9918* tms9918)
+VR_EMU_TMS9918_DLLEXPORT uint8_t vrEmuTms9918ReadData(VrEmuTms9918* tms9918)
 {
   if (tms9918 == NULL) return 0;
 
@@ -366,7 +366,7 @@ VR_EMU_TMS9918_DLLEXPORT_C uint8_t vrEmuTms9918ReadData(VrEmuTms9918* tms9918)
  * ----------------------------------------
  * read data (mode = 0) from the tms9918
  */
-VR_EMU_TMS9918_DLLEXPORT_C uint8_t vrEmuTms9918ReadDataNoInc(VrEmuTms9918* tms9918)
+VR_EMU_TMS9918_DLLEXPORT uint8_t vrEmuTms9918ReadDataNoInc(VrEmuTms9918* tms9918)
 {
   if (tms9918 == NULL) return 0;
 
@@ -657,7 +657,7 @@ static void __time_critical_func(vrEmuTms9918MulticolorScanLine)(VrEmuTms9918* t
  * ----------------------------------------
  * generate a scanline
  */
-VR_EMU_TMS9918_DLLEXPORT_C void __time_critical_func(vrEmuTms9918ScanLine)(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
+VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918ScanLine)(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
   if (tms9918 == NULL)
     return;
@@ -697,7 +697,7 @@ VR_EMU_TMS9918_DLLEXPORT_C void __time_critical_func(vrEmuTms9918ScanLine)(VrEmu
  * ----------------------------------------
  * return a reigister value
  */
-VR_EMU_TMS9918_DLLEXPORT_C
+VR_EMU_TMS9918_DLLEXPORT
 uint8_t vrEmuTms9918RegValue(VrEmuTms9918* tms9918, vrEmuTms9918Register reg)
 {
   if (tms9918 == NULL)
@@ -710,7 +710,7 @@ uint8_t vrEmuTms9918RegValue(VrEmuTms9918* tms9918, vrEmuTms9918Register reg)
  * ----------------------------------------
  * write a reigister value
  */
-VR_EMU_TMS9918_DLLEXPORT_C
+VR_EMU_TMS9918_DLLEXPORT
 void vrEmuTms9918WriteRegValue(VrEmuTms9918* tms9918, vrEmuTms9918Register reg, uint8_t value)
 {
   if (tms9918 != NULL)
@@ -726,7 +726,7 @@ void vrEmuTms9918WriteRegValue(VrEmuTms9918* tms9918, vrEmuTms9918Register reg, 
  * ----------------------------------------
  * return a value from vram
  */
-VR_EMU_TMS9918_DLLEXPORT_C
+VR_EMU_TMS9918_DLLEXPORT
 uint8_t vrEmuTms9918VramValue(VrEmuTms9918* tms9918, uint16_t addr)
 {
   if (tms9918 == NULL)
@@ -739,7 +739,7 @@ uint8_t vrEmuTms9918VramValue(VrEmuTms9918* tms9918, uint16_t addr)
   * ----------------------------------------
   * check BLANK flag
   */
-VR_EMU_TMS9918_DLLEXPORT_C
+VR_EMU_TMS9918_DLLEXPORT
 bool vrEmuTms9918DisplayEnabled(VrEmuTms9918* tms9918)
 {
   if (tms9918 == NULL)
