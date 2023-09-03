@@ -34,6 +34,38 @@ The goal is to emulate all documented modes listed in the [TMS9918A/TMS9928A/TMS
 #### Multicolor Mode Demo
 <img src="res/mcdemo.gif" alt="Multicolor Mode Demo" width="1279px">
 
+## Building
+
+vrEmuTms9918 uses the CMake build system
+
+#### Checkout repository
+
+```
+git clone https://github.com/visrealm/vrEmuTms9918.git
+cd vrEmuTms9918
+```
+
+#### Setup build
+
+```
+mkdir build
+cd build
+cmake ..
+```
+
+#### Build
+
+```
+cmake --build .
+```
+Windows: Optionally, open the generated solution file
+
+#### Run tests
+```
+ctest
+```
+Windows: Optionally, build the ALL_TESTS project in the generated solution file
+
 ## Quick start
 
 ```c
