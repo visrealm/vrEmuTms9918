@@ -49,7 +49,7 @@
   * TMS9918 palette (RGBA)
   */
 VR_EMU_TMS9918_DLLEXPORT
-const uint32_t vrEmuTms9918Palette[];
+uint32_t vrEmuTms9918Palette[];
 
 /*
  * Write a register value

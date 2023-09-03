@@ -15,7 +15,7 @@
 
  /* tms9918 palette */
 VR_EMU_TMS9918_DLLEXPORT
-const uint32_t vrEmuTms9918Palette[] = {
+uint32_t vrEmuTms9918Palette[] = {
   0x00000000, /* transparent */
   0x000000ff, /* black */
   0x21c942ff, /* medium green */
