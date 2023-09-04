@@ -13,6 +13,16 @@ if (NOT BUILD_SHARED_LIBS)
  add_definitions(-DVR_EMU_TMS9918_STATIC)
 endif()
 
+if (PROJECT_IS_TOP_LEVEL)
+	if(MSVC)
+	  add_compile_options(/W4 /WX)
+	  add_compile_options(/arch:AVX2 /Ox)
+	else()
+	  add_compile_options(-Wall -Wextra -Wpedantic -Werror)
+	  add_compile_options(-march=native)
+	endif()
+endif()
+
 include(CTest)
 
 add_subdirectory(src)

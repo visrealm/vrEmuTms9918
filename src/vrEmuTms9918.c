@@ -438,8 +438,10 @@ static void __time_critical_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms991
 
     if (spritesShown == 0)
     {
-      int *rsbInt = (int*)tms9918->rowSpriteBits;
-      for (int i = 0; i < sizeof(tms9918->rowSpriteBits) / sizeof(int); ++i)
+      int* rsbInt = (int*)tms9918->rowSpriteBits;
+      int* end = rsbInt + sizeof(tms9918->rowSpriteBits) / sizeof(int);
+
+      while (rsbInt < end)
       {
         *rsbInt++ = 0;
       }
@@ -571,7 +573,7 @@ static void __time_critical_func(vrEmuTms9918GraphicsIIScanLine)(VrEmuTms9918* t
   const uint8_t nameMask = ((tms9918->registers[TMS_REG_COLOR_TABLE] & 0x7f) << 3) | 0x07;
 
   const uint16_t pageThird = ((tileY & 0x18) >> 3)
-                              & (tms9918->registers[TMS_REG_PATTERN_TABLE] & 0x03); /* which page? 0-2 */
+    & (tms9918->registers[TMS_REG_PATTERN_TABLE] & 0x03); /* which page? 0-2 */
   const uint16_t pageOffset = pageThird << 11; /* offset (0, 0x800 or 0x1000) */
 
   const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918) + pageOffset;
