@@ -112,6 +112,18 @@ inline static void vrEmuTms9918WriteString(VrEmuTms9918* tms9918, const char* st
 }
 
 /*
+ * Write a series of chars to the VRAM with offset
+ */
+inline static void vrEmuTms9918WriteStringOffset(VrEmuTms9918* tms9918, const char* str, uint8_t offset)
+{
+  size_t len = strlen(str);
+  for (size_t i = 0; i < len; ++i)
+  {
+    vrEmuTms9918WriteData(tms9918, str[i] + offset);
+  }
+}
+
+/*
  * Return a colur byte consisting of foreground and background colors
  */
 inline static uint8_t vrEmuTms9918FgBgColor(vrEmuTms9918Color fg, vrEmuTms9918Color bg)
