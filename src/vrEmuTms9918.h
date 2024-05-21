@@ -155,6 +155,13 @@ void vrEmuTms9918WriteData(VrEmuTms9918* tms9918, uint8_t data);
 VR_EMU_TMS9918_DLLEXPORT
 uint8_t vrEmuTms9918ReadStatus(VrEmuTms9918* tms9918);
 
+/* Function:  vrEmuTms9918PeekStatus
+ * --------------------
+ * read from the status register without resetting it
+ */
+VR_EMU_TMS9918_DLLEXPORT
+uint8_t vrEmuTms9918PeekStatus(VrEmuTms9918* tms9918);
+
 /* Function:  vrEmuTms9918ReadData
  * --------------------
  * read data (mode = 0) from the tms9918

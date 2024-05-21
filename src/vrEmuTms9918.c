@@ -254,19 +254,16 @@ VR_EMU_TMS9918_DLLEXPORT VrEmuTms9918* vrEmuTms9918New()
  */
 VR_EMU_TMS9918_DLLEXPORT void vrEmuTms9918Reset(VrEmuTms9918* tms9918)
 {
-  if (tms9918)
-  {
-    tms9918->regWriteStage0Value = 0;
-    tms9918->currentAddress = 0;
-    tms9918->regWriteStage = 0;
-    tms9918->status = 0;
-    tms9918->readAheadBuffer = 0;
-    memset(tms9918->registers, 0, sizeof(tms9918->registers));
+  tms9918->regWriteStage0Value = 0;
+  tms9918->currentAddress = 0;
+  tms9918->regWriteStage = 0;
+  tms9918->status = 0;
+  tms9918->readAheadBuffer = 0;
+  memset(tms9918->registers, 0, sizeof(tms9918->registers));
 
-    /* ram intentionally left in unknown state */
+  /* ram intentionally left in unknown state */
 
-    tms9918->mode = tmsMode(tms9918);
-  }
+  tms9918->mode = tmsMode(tms9918);
 }
 
 
@@ -278,10 +275,7 @@ VR_EMU_TMS9918_DLLEXPORT void vrEmuTms9918Reset(VrEmuTms9918* tms9918)
  */
 VR_EMU_TMS9918_DLLEXPORT void vrEmuTms9918Destroy(VrEmuTms9918* tms9918)
 {
-  if (tms9918)
-  {
-    free(tms9918);
-  }
+  free(tms9918);
 }
 
 /* Function:  vrEmuTms9918WriteAddr
@@ -292,8 +286,6 @@ VR_EMU_TMS9918_DLLEXPORT void vrEmuTms9918Destroy(VrEmuTms9918* tms9918)
  */
 VR_EMU_TMS9918_DLLEXPORT void vrEmuTms9918WriteAddr(VrEmuTms9918* tms9918, uint8_t data)
 {
-  if (tms9918 == NULL) return;
-
   if (tms9918->regWriteStage == 0)
   {
     /* first stage byte - either an address LSB or a register value */
@@ -329,14 +321,20 @@ VR_EMU_TMS9918_DLLEXPORT void vrEmuTms9918WriteAddr(VrEmuTms9918* tms9918, uint8
  */
 VR_EMU_TMS9918_DLLEXPORT uint8_t vrEmuTms9918ReadStatus(VrEmuTms9918* tms9918)
 {
-  if (tms9918 == NULL) return 0;
-
   const uint8_t tmpStatus = tms9918->status;
   tms9918->status = 0;
   tms9918->regWriteStage = 0;
   return tmpStatus;
 }
 
+/* Function:  vrEmuTms9918PeekStatus
+ * ----------------------------------------
+ * read from the status register without resetting it
+ */
+VR_EMU_TMS9918_DLLEXPORT uint8_t vrEmuTms9918PeekStatus(VrEmuTms9918* tms9918)
+{
+  return tms9918->status;
+}
 
 /* Function:  vrEmuTms9918WriteData
  * ----------------------------------------
@@ -346,8 +344,6 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t vrEmuTms9918ReadStatus(VrEmuTms9918* tms9918)
  */
 VR_EMU_TMS9918_DLLEXPORT void vrEmuTms9918WriteData(VrEmuTms9918* tms9918, uint8_t data)
 {
-  if (tms9918 == NULL) return;
-
   tms9918->regWriteStage = 0;
   tms9918->readAheadBuffer = data;
   tms9918->vram[(tms9918->currentAddress++) & VRAM_MASK] = data;
@@ -360,8 +356,6 @@ VR_EMU_TMS9918_DLLEXPORT void vrEmuTms9918WriteData(VrEmuTms9918* tms9918, uint8
  */
 VR_EMU_TMS9918_DLLEXPORT uint8_t vrEmuTms9918ReadData(VrEmuTms9918* tms9918)
 {
-  if (tms9918 == NULL) return 0;
-
   tms9918->regWriteStage = 0;
   uint8_t currentValue = tms9918->readAheadBuffer;
   tms9918->readAheadBuffer = tms9918->vram[(tms9918->currentAddress++) & VRAM_MASK];
@@ -374,8 +368,6 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t vrEmuTms9918ReadData(VrEmuTms9918* tms9918)
  */
 VR_EMU_TMS9918_DLLEXPORT uint8_t vrEmuTms9918ReadDataNoInc(VrEmuTms9918* tms9918)
 {
-  if (tms9918 == NULL) return 0;
-
   return tms9918->readAheadBuffer;
 }
 
@@ -667,9 +659,6 @@ static void __time_critical_func(vrEmuTms9918MulticolorScanLine)(VrEmuTms9918* t
  */
 VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918ScanLine)(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
-  if (tms9918 == NULL)
-    return;
-
   if (!vrEmuTms9918DisplayEnabled(tms9918) || y >= TMS9918_PIXELS_Y)
   {
     memset(pixels, tmsMainBgColor(tms9918), TMS9918_PIXELS_X);
@@ -708,9 +697,6 @@ VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918ScanLine)(VrEmuTm
 VR_EMU_TMS9918_DLLEXPORT
 uint8_t vrEmuTms9918RegValue(VrEmuTms9918* tms9918, vrEmuTms9918Register reg)
 {
-  if (tms9918 == NULL)
-    return 0;
-
   return tms9918->registers[reg & 0x07];
 }
 
@@ -721,11 +707,8 @@ uint8_t vrEmuTms9918RegValue(VrEmuTms9918* tms9918, vrEmuTms9918Register reg)
 VR_EMU_TMS9918_DLLEXPORT
 void vrEmuTms9918WriteRegValue(VrEmuTms9918* tms9918, vrEmuTms9918Register reg, uint8_t value)
 {
-  if (tms9918 != NULL)
-  {
-    tms9918->registers[reg & 0x07] = value;
-    tms9918->mode = tmsMode(tms9918);
-  }
+  tms9918->registers[reg & 0x07] = value;
+  tms9918->mode = tmsMode(tms9918);
 }
 
 
@@ -737,9 +720,6 @@ void vrEmuTms9918WriteRegValue(VrEmuTms9918* tms9918, vrEmuTms9918Register reg, 
 VR_EMU_TMS9918_DLLEXPORT
 uint8_t vrEmuTms9918VramValue(VrEmuTms9918* tms9918, uint16_t addr)
 {
-  if (tms9918 == NULL)
-    return 0;
-
   return tms9918->vram[addr & VRAM_MASK];
 }
 
@@ -750,9 +730,6 @@ uint8_t vrEmuTms9918VramValue(VrEmuTms9918* tms9918, uint16_t addr)
 VR_EMU_TMS9918_DLLEXPORT
 bool vrEmuTms9918DisplayEnabled(VrEmuTms9918* tms9918)
 {
-  if (tms9918 == NULL)
-    return false;
-
   return tms9918->registers[TMS_REG_1] & TMS_R1_DISP_ACTIVE;
 }
 
