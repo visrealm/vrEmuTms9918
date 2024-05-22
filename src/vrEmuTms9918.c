@@ -668,6 +668,10 @@ VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918ScanLine)(VrEmuTm
   if (!vrEmuTms9918DisplayEnabled(tms9918) || y >= TMS9918_PIXELS_Y)
   {
     memset(pixels, tmsMainBgColor(tms9918), TMS9918_PIXELS_X);
+    if (y == TMS9918_PIXELS_Y - 1 && (tms9918->registers[1] & TMS_R1_INT_ENABLE))
+    {
+      tms9918->status |= STATUS_INT;
+    }
     return;
   }
 
