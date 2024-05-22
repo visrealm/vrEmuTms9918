@@ -105,6 +105,12 @@ struct vrEmuTMS9918_s
  */
 static vrEmuTms9918Mode __time_critical_func(tmsMode)(VrEmuTms9918* tms9918)
 {
+  if ((tms9918->registers[1] & TMS_R1_INT_ENABLE) == 0)
+  {
+    tms9918->status &= ~STATUS_INT;
+  }
+
+
   if (tms9918->registers[TMS_REG_0] & TMS_R0_MODE_GRAPHICS_II)
   {
     return TMS_MODE_GRAPHICS_II;
@@ -388,7 +394,7 @@ static void __time_critical_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms991
 
   if (y == 0)
   {
-    tms9918->status = 0;
+    tms9918->status &= ~STATUS_INT;
   }
 
   uint8_t* spriteAttr = tms9918->vram + spriteAttrTableAddr;
