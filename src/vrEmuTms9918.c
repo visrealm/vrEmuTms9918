@@ -328,7 +328,7 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t vrEmuTms9918ReadStatus(VrEmuTms9918* tms9918)
 {
   const uint8_t tmpStatus = tms9918->status;
   tms9918->status = 0;
-  //tms9918->regWriteStage = 0;
+  tms9918->regWriteStage = 0;
   return tmpStatus;
 }
 
@@ -350,7 +350,7 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t vrEmuTms9918PeekStatus(VrEmuTms9918* tms9918)
 VR_EMU_TMS9918_DLLEXPORT void vrEmuTms9918WriteData(VrEmuTms9918* tms9918, uint8_t data)
 {
   tms9918->regWriteStage = 0;
-  //tms9918->readAheadBuffer = data;
+  tms9918->readAheadBuffer = data;
   tms9918->vram[(tms9918->currentAddress++) & VRAM_MASK] = data;
 }
 
