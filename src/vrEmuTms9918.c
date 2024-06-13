@@ -644,15 +644,14 @@ static void __time_critical_func(vrEmuTms9918MulticolorScanLine)(VrEmuTms9918* t
   const uint8_t tileY = y >> 3;
   const uint8_t pattRow = ((y >> 2) & 0x01) + (tileY & 0x03) * 2;
 
-  const uint16_t namesAddr = tmsNameTableAddr(tms9918) + tileY * GRAPHICS_NUM_COLS;
+  const uint8_t* nameTable = tms9918->vram + tmsNameTableAddr(tms9918) + tileY * GRAPHICS_NUM_COLS;
   const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918) + pattRow;
 
   uint8_t* pixPtr = pixels - 1;
 
   for (uint8_t tileX = 0; tileX < GRAPHICS_NUM_COLS; ++tileX)
   {
-    const uint8_t pattIdx = tms9918->vram[namesAddr + tileX];
-    const uint8_t colorByte = patternTable[pattIdx * PATTERN_BYTES];
+    const uint8_t colorByte = patternTable[nameTable[tileX] * PATTERN_BYTES];
 
     const uint8_t fgColor = tmsFgColor(tms9918, colorByte);
     const uint8_t bgColor = tmsBgColor(tms9918, colorByte);
@@ -661,6 +660,7 @@ static void __time_critical_func(vrEmuTms9918MulticolorScanLine)(VrEmuTms9918* t
     *++pixPtr = fgColor;
     *++pixPtr = fgColor;
     *++pixPtr = fgColor;
+
     *++pixPtr = bgColor;
     *++pixPtr = bgColor;
     *++pixPtr = bgColor;
