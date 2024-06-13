@@ -59,6 +59,7 @@ typedef enum
   TMS_MODE_GRAPHICS_II,
   TMS_MODE_TEXT,
   TMS_MODE_MULTICOLOR,
+  TMS_MODE_TEXT80,
 } vrEmuTms9918Mode;
 
 typedef enum

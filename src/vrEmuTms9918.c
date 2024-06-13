@@ -39,6 +39,7 @@
 #define TEXT_NUM_ROWS             24
 #define TEXT_CHAR_WIDTH            6
 #define TEXT_PADDING_PX            8
+#define TEXT80_NUM_COLS           80
 
 #define PATTERN_BYTES              8
 #define GFXI_COLOR_GROUP_SIZE      8
@@ -57,6 +58,7 @@
 #define STATUS_5S               0x40
 #define STATUS_COL              0x20
 
+#define TMS_R0_MODE_TEXT_80     0x04
 #define TMS_R0_MODE_GRAPHICS_II 0x02
 #define TMS_R0_EXT_VDP_ENABLE   0x01
 
@@ -125,7 +127,7 @@ static vrEmuTms9918Mode __time_critical_func(tmsMode)(VrEmuTms9918* tms9918)
       return TMS_MODE_MULTICOLOR;
 
     case 2:
-      return TMS_MODE_TEXT;
+      return tms9918->registers[TMS_REG_0] & TMS_R0_MODE_TEXT_80 ? TMS_MODE_TEXT80 : TMS_MODE_TEXT;
   }
   return TMS_MODE_GRAPHICS_I;
 }
@@ -304,9 +306,16 @@ VR_EMU_TMS9918_DLLEXPORT void vrEmuTms9918WriteAddr(VrEmuTms9918* tms9918, uint8
 
     if (data & 0x80) /* register */
     {
-      tms9918->registers[data & 0x07] = tms9918->regWriteStage0Value;
+      if ((data & 0x78) == 0)
+      {
+        tms9918->registers[data & 0x07] = tms9918->regWriteStage0Value;
 
-      tms9918->mode = tmsMode(tms9918);
+        tms9918->mode = tmsMode(tms9918);
+      }
+      else
+      {
+        // ignore higher registers
+      }
     }
     else /* address */
     {
@@ -444,7 +453,6 @@ static void __time_critical_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms991
       }
     }
 
-    const uint8_t spriteColor = spriteAttr[SPRITE_ATTR_COLOR] & 0x0f;
 
     /* have we exceeded the scanline sprite limit? */
     if (++spritesShown > MAX_SCANLINE_SPRITES)
@@ -467,7 +475,7 @@ static void __time_critical_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms991
     uint8_t screenBit = 0, pattBit = 0;
 
     int16_t endXPos = xPos + spriteSizePx;
-    if (endXPos >= TMS9918_PIXELS_X)
+    if (endXPos > TMS9918_PIXELS_X)
     {
       endXPos = TMS9918_PIXELS_X;
     }
@@ -481,7 +489,6 @@ static void __time_critical_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms991
           if (spriteColor != TMS_TRANSPARENT && tms9918->rowSpriteBits[screenX] < 2)
           {
             pixels[screenX] = spriteColor;
-          }
 
           /* we still process transparent sprites, since
              they're used in 5S and collision checks */
@@ -690,6 +697,10 @@ VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918ScanLine)(VrEmuTm
 
     case TMS_MODE_MULTICOLOR:
       vrEmuTms9918MulticolorScanLine(tms9918, y, pixels);
+      break;
+
+    case TMS_R0_MODE_TEXT_80:
+      vrEmuTms9918Text80ScanLine(tms9918, y, pixels);
       break;
   }
 
