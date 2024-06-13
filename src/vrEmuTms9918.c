@@ -98,6 +98,9 @@ struct vrEmuTMS9918_s
   uint8_t vram[VRAM_SIZE];
 
   uint8_t rowSpriteBits[TMS9918_PIXELS_X]; /* collision mask */
+
+  bool pattLookupInit;
+  uint32_t pattLookup[256 * 16];
 };
 
 
@@ -267,6 +270,7 @@ VR_EMU_TMS9918_DLLEXPORT void vrEmuTms9918Reset(VrEmuTms9918* tms9918)
   tms9918->status = 0;
   tms9918->readAheadBuffer = 0;
   memset(tms9918->registers, 0, sizeof(tms9918->registers));
+  tms9918->pattLookupInit = false;
 
   /* ram intentionally left in unknown state */
 
@@ -467,7 +471,7 @@ static void __time_critical_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms991
     const int16_t xPos = (int16_t)(spriteAttr[SPRITE_ATTR_X]) + earlyClockOffset;
 
     int8_t pattByte = tms9918->vram[pattOffset];
-    uint8_t screenBit = 0, pattBit = 0;
+    uint8_t screenBit = 0, pattBit = GRAPHICS_CHAR_WIDTH;
 
     int16_t endXPos = xPos + spriteSizePx;
     if (endXPos > TMS9918_PIXELS_X)
@@ -502,9 +506,9 @@ static void __time_critical_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms991
       if (!spriteMag || (screenBit & 0x01))
       {
         pattByte <<= 1;
-        if (++pattBit == GRAPHICS_CHAR_WIDTH && sprite16) /* from A -> C or B -> D of large sprite */
+        if (!--pattBit && sprite16) /* from A -> C or B -> D of large sprite */
         {
-          pattBit = 0;
+          pattBit = GRAPHICS_CHAR_WIDTH;
           pattByte = tms9918->vram[pattOffset + PATTERN_BYTES * 2];
         }
       }
@@ -527,29 +531,25 @@ static void __time_critical_func(vrEmuTms9918GraphicsIScanLine)(VrEmuTms9918* tm
   /* address in name table at the start of this row */
   const uint16_t rowNamesAddr = tmsNameTableAddr(tms9918) + tileY * GRAPHICS_NUM_COLS;
 
-  const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918);
+  const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918) + pattRow;
   const uint8_t* colorTable = tms9918->vram + tmsColorTableAddr(tms9918);
+
+  uint32_t* pixPtr = (uint32_t*)pixels;
 
   /* iterate over each tile in this row */
   for (uint8_t tileX = 0; tileX < GRAPHICS_NUM_COLS; ++tileX)
   {
     const uint8_t pattIdx = tms9918->vram[rowNamesAddr + tileX];
-    uint8_t pattByte = patternTable[pattIdx * PATTERN_BYTES + pattRow];
+    uint8_t pattByte = patternTable[pattIdx * PATTERN_BYTES];
     const uint8_t colorByte = colorTable[pattIdx / GFXI_COLOR_GROUP_SIZE];
 
-    const uint8_t fgColor = tmsFgColor(tms9918, colorByte);
-    const uint8_t bgColor = tmsBgColor(tms9918, colorByte);
+    int palette = ((tmsFgColor(tms9918, colorByte) << 4) | tmsBgColor(tms9918, colorByte)) * 16;
 
-    /* iterate over each bit of this pattern byte */
-    for (uint8_t pattBit = 0; pattBit < GRAPHICS_CHAR_WIDTH; ++pattBit)
-    {
-      const bool pixelBit = pattByte & 0x80;
-      *(pixels++) = pixelBit ? fgColor : bgColor;
-      pattByte <<= 1;
-    }
+    *pixPtr++ = tms9918->pattLookup[palette + (pattByte >> 4)];
+    *pixPtr++ = tms9918->pattLookup[palette + (pattByte & 0x0f)];
   }
 
-  vrEmuTms9918OutputSprites(tms9918, y, pixels - TMS9918_PIXELS_X);
+  vrEmuTms9918OutputSprites(tms9918, y, pixels);
 }
 
 /* Function:  vrEmuTms9918GraphicsIIScanLine
@@ -575,28 +575,25 @@ static void __time_critical_func(vrEmuTms9918GraphicsIIScanLine)(VrEmuTms9918* t
     & (tms9918->registers[TMS_REG_PATTERN_TABLE] & 0x03); /* which page? 0-2 */
   const uint16_t pageOffset = pageThird << 11; /* offset (0, 0x800 or 0x1000) */
 
-  const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918) + pageOffset;
+  const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918) + pageOffset + pattRow;
   const uint8_t* colorTable = tms9918->vram + tmsColorTableAddr(tms9918) + (pageOffset
-    & ((tms9918->registers[TMS_REG_COLOR_TABLE] & 0x60) << 6));
+    & ((tms9918->registers[TMS_REG_COLOR_TABLE] & 0x60) << 6)) + pattRow;
+
+  uint32_t* pixPtr = (uint32_t*)pixels;
 
   /* iterate over each tile in this row */
   for (uint8_t tileX = 0; tileX < GRAPHICS_NUM_COLS; ++tileX)
   {
     uint8_t pattIdx = tms9918->vram[rowNamesAddr + tileX] & nameMask;
 
-    const size_t pattRowOffset = pattIdx * PATTERN_BYTES + pattRow;
+    const size_t pattRowOffset = pattIdx * PATTERN_BYTES;
     const uint8_t pattByte = patternTable[pattRowOffset];
     const uint8_t colorByte = colorTable[pattRowOffset];
 
-    const vrEmuTms9918Color fgColor = tmsFgColor(tms9918, colorByte);
-    const vrEmuTms9918Color bgColor = tmsBgColor(tms9918, colorByte);
+    uint32_t* palPtr = tms9918->pattLookup + ((tmsFgColor(tms9918, colorByte) << 4) | tmsBgColor(tms9918, colorByte)) * 16;
 
-    /* iterate over each bit of this pattern byte */
-    for (uint8_t pattBit = 0; pattBit < GRAPHICS_CHAR_WIDTH; ++pattBit)
-    {
-      const bool pixelBit = (pattByte << pattBit) & 0x80;
-      pixels[tileX * GRAPHICS_CHAR_WIDTH + pattBit] = (uint8_t)(pixelBit ? fgColor : bgColor);
-    }
+    *pixPtr++ = palPtr[pattByte >> 4];
+    *pixPtr++ = palPtr[pattByte & 0x0f];
   }
 
   vrEmuTms9918OutputSprites(tms9918, y, pixels);
@@ -615,24 +612,24 @@ static void __time_critical_func(vrEmuTms9918TextScanLine)(VrEmuTms9918* tms9918
   const uint16_t rowNamesAddr = tmsNameTableAddr(tms9918) + tileY * TEXT_NUM_COLS;
   const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918);
 
-  const vrEmuTms9918Color bgColor = tmsMainBgColor(tms9918);
-  const vrEmuTms9918Color fgColor = tmsMainFgColor(tms9918);
+  uint32_t* palPtr = tms9918->pattLookup + tms9918->registers[TMS_REG_FG_BG_COLOR] * 16;
 
-  /* fill the first and last 8 pixels with bg color */
-  memset(pixels, bgColor, TEXT_PADDING_PX);
-  memset(pixels + TMS9918_PIXELS_X - TEXT_PADDING_PX, bgColor, TEXT_PADDING_PX);
+  /* fill the first 8 pixels with bg color */
+  memset(pixels, tms9918->registers[TMS_REG_FG_BG_COLOR] & 0x0f, TEXT_PADDING_PX);
+  uint32_t* pixPtr = (uint32_t*)(pixels + TEXT_PADDING_PX);
 
   for (uint8_t tileX = 0; tileX < TEXT_NUM_COLS; ++tileX)
   {
     const uint8_t pattIdx = tms9918->vram[rowNamesAddr + tileX];
     const uint8_t pattByte = patternTable[pattIdx * PATTERN_BYTES + pattRow];
 
-    for (uint8_t pattBit = 0; pattBit < TEXT_CHAR_WIDTH; ++pattBit)
-    {
-      bool pixelBit = (pattByte << pattBit) & 0x80;
-      pixels[TEXT_PADDING_PX + tileX * TEXT_CHAR_WIDTH + pattBit] = (uint8_t)(pixelBit ? fgColor : bgColor);
-    }
+    *pixPtr++ = palPtr[pattByte >> 4];
+    *pixPtr = palPtr[pattByte & 0x0f];
+    pixPtr = (uint32_t*)(((uint16_t*)pixPtr) + 1);
   }
+
+  /* fill the last 8 pixels with bg color */
+  memset(pixPtr, tms9918->registers[TMS_REG_FG_BG_COLOR] & 0x0f, TEXT_PADDING_PX);
 }
 
 /* Function:  vrEmuTms9918MulticolorScanLine
@@ -647,24 +644,16 @@ static void __time_critical_func(vrEmuTms9918MulticolorScanLine)(VrEmuTms9918* t
   const uint8_t* nameTable = tms9918->vram + tmsNameTableAddr(tms9918) + tileY * GRAPHICS_NUM_COLS;
   const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918) + pattRow;
 
-  uint8_t* pixPtr = pixels - 1;
+  uint32_t* pixPtr = (uint32_t*)pixels;
 
   for (uint8_t tileX = 0; tileX < GRAPHICS_NUM_COLS; ++tileX)
   {
     const uint8_t colorByte = patternTable[nameTable[tileX] * PATTERN_BYTES];
 
-    const uint8_t fgColor = tmsFgColor(tms9918, colorByte);
-    const uint8_t bgColor = tmsBgColor(tms9918, colorByte);
+    uint32_t* palPtr = tms9918->pattLookup + ((tmsFgColor(tms9918, colorByte) << 4) | tmsBgColor(tms9918, colorByte)) * 16;
 
-    *++pixPtr = fgColor;
-    *++pixPtr = fgColor;
-    *++pixPtr = fgColor;
-    *++pixPtr = fgColor;
-
-    *++pixPtr = bgColor;
-    *++pixPtr = bgColor;
-    *++pixPtr = bgColor;
-    *++pixPtr = bgColor;
+    *pixPtr++ = palPtr[0xf];
+    *pixPtr++ = palPtr[0x0];
   }
 
   vrEmuTms9918OutputSprites(tms9918, y, pixels);
@@ -727,6 +716,27 @@ VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918ScanLine)(VrEmuTm
       tms9918->status |= STATUS_INT;
     }
     return;
+  }
+
+  if (!tms9918->pattLookupInit)
+  {
+    tms9918->pattLookupInit = true;
+
+    uint32_t* pattPtr = tms9918->pattLookup;
+    for (int pal = 0; pal < 256; ++pal)
+    {
+      uint8_t fg = pal >> 4;
+      uint8_t bg = pal & 0x0f;
+      for (int patt = 0; patt < 16; ++patt)
+      {
+        uint32_t patternColors = 0;
+        patternColors |= ((patt & 0x01) ? fg : bg) << 24;
+        patternColors |= ((patt & 0x02) ? fg : bg) << 16;
+        patternColors |= ((patt & 0x04) ? fg : bg) << 8;
+        patternColors |= ((patt & 0x08) ? fg : bg);
+        *pattPtr++ = patternColors;
+      }
+    }
   }
 
   switch (tms9918->mode)
