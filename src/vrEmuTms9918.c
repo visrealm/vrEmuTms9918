@@ -91,6 +91,8 @@ struct vrEmuTMS9918_s
   /* buffered value */
   uint8_t readAheadBuffer;
 
+  bool interruptsEnabled;
+
   /* current display mode */
   vrEmuTms9918Mode mode;
 
@@ -110,10 +112,7 @@ struct vrEmuTMS9918_s
  */
 static vrEmuTms9918Mode __time_critical_func(tmsMode)(VrEmuTms9918* tms9918)
 {
-  if ((tms9918->registers[TMS_REG_1] & TMS_R1_INT_ENABLE) == 0)
-  {
-    tms9918->status &= ~STATUS_INT;
-  }
+  tms9918->interruptsEnabled = tms9918->registers[TMS_REG_1] & TMS_R1_INT_ENABLE;
 
   if (tms9918->registers[TMS_REG_0] & TMS_R0_MODE_GRAPHICS_II)
   {
@@ -312,9 +311,12 @@ VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918WriteAddr)(VrEmuT
     {
       if ((data & 0x78) == 0)
       {
-        tms9918->registers[data & 0x07] = tms9918->regWriteStage0Value;
-
-        tms9918->mode = tmsMode(tms9918);
+        int regIndex = data & 0x07;
+        tms9918->registers[regIndex] = tms9918->regWriteStage0Value;
+        if (regIndex < 2)
+        {
+          tms9918->mode = tmsMode(tms9918);
+        }
       }
       else
       {
@@ -389,6 +391,17 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ReadDataNoInc)
   return tms9918->readAheadBuffer;
 }
 
+/* Function:  vrEmuTms9918InterruptStatus
+ * --------------------
+ * return true if both INT status and INT control set
+ */
+VR_EMU_TMS9918_DLLEXPORT
+bool __time_critical_func(vrEmuTms9918InterruptStatus)(VrEmuTms9918* tms9918)
+{
+  return tms9918->interruptsEnabled && (tms9918->status & STATUS_INT);
+}
+
+
 /* Function:  vrEmuTms9918OutputSprites
  * ----------------------------------------
  * Output Sprites to a scanline
@@ -396,8 +409,8 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ReadDataNoInc)
 static void __time_critical_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
   const bool spriteMag = tmsSpriteMag(tms9918);
-  const bool sprite16 = tmsSpriteSize(tms9918) == 16;
   const uint8_t spriteSize = tmsSpriteSize(tms9918);
+  const bool sprite16 = spriteSize == 16;
   const uint8_t spriteSizePx = spriteSize * (spriteMag + 1);
   const uint16_t spriteAttrTableAddr = tmsSpriteAttrTableAddr(tms9918);
   const uint16_t spritePatternAddr = tmsSpritePatternTableAddr(tms9918);
@@ -711,7 +724,7 @@ VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918ScanLine)(VrEmuTm
   if (!vrEmuTms9918DisplayEnabled(tms9918) || y >= TMS9918_PIXELS_Y)
   {
     memset(pixels, tmsMainBgColor(tms9918), TMS9918_PIXELS_X);
-    if (y == TMS9918_PIXELS_Y - 1 && (tms9918->registers[1] & TMS_R1_INT_ENABLE))
+    if (y == TMS9918_PIXELS_Y - 1)
     {
       tms9918->status |= STATUS_INT;
     }
@@ -762,7 +775,7 @@ VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918ScanLine)(VrEmuTm
       break;
   }
 
-  if (y == TMS9918_PIXELS_Y - 1 && (tms9918->registers[1] & TMS_R1_INT_ENABLE))
+  if (y == TMS9918_PIXELS_Y - 1)
   {
     tms9918->status |= STATUS_INT;
   }
@@ -785,8 +798,12 @@ uint8_t __time_critical_func(vrEmuTms9918RegValue)(VrEmuTms9918* tms9918, vrEmuT
 VR_EMU_TMS9918_DLLEXPORT
 void vrEmuTms9918WriteRegValue(VrEmuTms9918* tms9918, vrEmuTms9918Register reg, uint8_t value)
 {
-  tms9918->registers[reg & 0x07] = value;
-  tms9918->mode = tmsMode(tms9918);
+  int regIndex = reg & 0x07;
+  tms9918->registers[regIndex] = value;
+  if (regIndex < 2)
+  {
+    tms9918->mode = tmsMode(tms9918);
+  }
 }
 
 

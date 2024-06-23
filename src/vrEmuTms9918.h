@@ -179,6 +179,14 @@ VR_EMU_TMS9918_DLLEXPORT
 uint8_t vrEmuTms9918ReadDataNoInc(VrEmuTms9918* tms9918);
 
 
+/* Function:  vrEmuTms9918InterruptStatus
+ * --------------------
+ * return true if both INT status and INT control set
+ */
+VR_EMU_TMS9918_DLLEXPORT
+bool vrEmuTms9918InterruptStatus(VrEmuTms9918* tms9918);
+
+
 /* Function:  vrEmuTms9918ScanLine
  * ----------------------------------------
  * generate a scanline
