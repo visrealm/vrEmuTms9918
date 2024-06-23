@@ -395,8 +395,7 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ReadDataNoInc)
  * --------------------
  * return true if both INT status and INT control set
  */
-VR_EMU_TMS9918_DLLEXPORT
-bool __time_critical_func(vrEmuTms9918InterruptStatus)(VrEmuTms9918* tms9918)
+VR_EMU_TMS9918_DLLEXPORT bool __time_critical_func(vrEmuTms9918InterruptStatus)(VrEmuTms9918* tms9918)
 {
   return tms9918->interruptsEnabled && (tms9918->status & STATUS_INT);
 }
@@ -724,55 +723,52 @@ VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918ScanLine)(VrEmuTm
   if (!vrEmuTms9918DisplayEnabled(tms9918) || y >= TMS9918_PIXELS_Y)
   {
     memset(pixels, tmsMainBgColor(tms9918), TMS9918_PIXELS_X);
-    if (y == TMS9918_PIXELS_Y - 1)
-    {
-      tms9918->status |= STATUS_INT;
-    }
-    return;
   }
-
-  if (!tms9918->pattLookupInit)
+  else
   {
-    tms9918->pattLookupInit = true;
-
-    uint32_t* pattPtr = tms9918->pattLookup;
-    for (int pal = 0; pal < 256; ++pal)
+    if (!tms9918->pattLookupInit)
     {
-      uint8_t fg = pal >> 4;
-      uint8_t bg = pal & 0x0f;
-      for (int patt = 0; patt < 16; ++patt)
+      tms9918->pattLookupInit = true;
+
+      uint32_t* pattPtr = tms9918->pattLookup;
+      for (int pal = 0; pal < 256; ++pal)
       {
-        uint32_t patternColors = 0;
-        patternColors |= ((patt & 0x01) ? fg : bg) << 24;
-        patternColors |= ((patt & 0x02) ? fg : bg) << 16;
-        patternColors |= ((patt & 0x04) ? fg : bg) << 8;
-        patternColors |= ((patt & 0x08) ? fg : bg);
-        *pattPtr++ = patternColors;
+        uint8_t fg = pal >> 4;
+        uint8_t bg = pal & 0x0f;
+        for (int patt = 0; patt < 16; ++patt)
+        {
+          uint32_t patternColors = 0;
+          patternColors |= ((patt & 0x01) ? fg : bg) << 24;
+          patternColors |= ((patt & 0x02) ? fg : bg) << 16;
+          patternColors |= ((patt & 0x04) ? fg : bg) << 8;
+          patternColors |= ((patt & 0x08) ? fg : bg);
+          *pattPtr++ = patternColors;
+        }
       }
     }
-  }
 
-  switch (tms9918->mode)
-  {
-    case TMS_MODE_GRAPHICS_I:
-      vrEmuTms9918GraphicsIScanLine(tms9918, y, pixels);
-      break;
+    switch (tms9918->mode)
+    {
+      case TMS_MODE_GRAPHICS_I:
+        vrEmuTms9918GraphicsIScanLine(tms9918, y, pixels);
+        break;
 
-    case TMS_MODE_GRAPHICS_II:
-      vrEmuTms9918GraphicsIIScanLine(tms9918, y, pixels);
-      break;
+      case TMS_MODE_GRAPHICS_II:
+        vrEmuTms9918GraphicsIIScanLine(tms9918, y, pixels);
+        break;
 
-    case TMS_MODE_TEXT:
-      vrEmuTms9918TextScanLine(tms9918, y, pixels);
-      break;
+      case TMS_MODE_TEXT:
+        vrEmuTms9918TextScanLine(tms9918, y, pixels);
+        break;
 
-    case TMS_MODE_MULTICOLOR:
-      vrEmuTms9918MulticolorScanLine(tms9918, y, pixels);
-      break;
+      case TMS_MODE_MULTICOLOR:
+        vrEmuTms9918MulticolorScanLine(tms9918, y, pixels);
+        break;
 
-    case TMS_R0_MODE_TEXT_80:
-      vrEmuTms9918Text80ScanLine(tms9918, y, pixels);
-      break;
+      case TMS_R0_MODE_TEXT_80:
+        vrEmuTms9918Text80ScanLine(tms9918, y, pixels);
+        break;
+    }
   }
 
   if (y == TMS9918_PIXELS_Y - 1)
