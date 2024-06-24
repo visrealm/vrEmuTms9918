@@ -186,6 +186,13 @@ uint8_t vrEmuTms9918ReadDataNoInc(VrEmuTms9918* tms9918);
 VR_EMU_TMS9918_DLLEXPORT
 bool vrEmuTms9918InterruptStatus(VrEmuTms9918* tms9918);
 
+/* Function:  vrEmuTms9918InterruptSet
+ * --------------------
+ * set interrupt flag
+ */
+VR_EMU_TMS9918_DLLEXPORT
+void vrEmuTms9918InterruptSet(VrEmuTms9918* tms9918);
+
 
 /* Function:  vrEmuTms9918ScanLine
  * ----------------------------------------

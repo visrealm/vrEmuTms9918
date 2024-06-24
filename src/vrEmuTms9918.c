@@ -400,6 +400,16 @@ VR_EMU_TMS9918_DLLEXPORT bool __time_critical_func(vrEmuTms9918InterruptStatus)(
   return tms9918->interruptsEnabled && (tms9918->status & STATUS_INT);
 }
 
+/* Function:  vrEmuTms9918InterruptSet
+ * --------------------
+ * return true if both INT status and INT control set
+ */
+VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918InterruptSet)(VrEmuTms9918* tms9918)
+{
+  tms9918->status |= STATUS_INT;
+}
+
+
 
 /* Function:  vrEmuTms9918OutputSprites
  * ----------------------------------------
@@ -482,7 +492,7 @@ static void __time_critical_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms991
     const int16_t earlyClockOffset = (spriteAttr[SPRITE_ATTR_COLOR] & 0x80) ? -32 : 0;
     const int16_t xPos = (int16_t)(spriteAttr[SPRITE_ATTR_X]) + earlyClockOffset;
 
-    int8_t pattByte = tms9918->vram[pattOffset];
+    int8_t pattByte = tms9918->vram[pattOffset & VRAM_MASK];
     uint8_t screenBit = 0, pattBit = GRAPHICS_CHAR_WIDTH;
 
     int16_t endXPos = xPos + spriteSizePx;
@@ -521,7 +531,7 @@ static void __time_critical_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms991
         if (!--pattBit && sprite16) /* from A -> C or B -> D of large sprite */
         {
           pattBit = GRAPHICS_CHAR_WIDTH;
-          pattByte = tms9918->vram[pattOffset + PATTERN_BYTES * 2];
+          pattByte = tms9918->vram[(pattOffset + PATTERN_BYTES * 2) & VRAM_MASK];
         }
       }
     }
@@ -769,11 +779,6 @@ VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918ScanLine)(VrEmuTm
         vrEmuTms9918Text80ScanLine(tms9918, y, pixels);
         break;
     }
-  }
-
-  if (y == TMS9918_PIXELS_Y - 1)
-  {
-    tms9918->status |= STATUS_INT;
   }
 }
 
