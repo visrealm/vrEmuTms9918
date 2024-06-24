@@ -193,6 +193,12 @@ bool vrEmuTms9918InterruptStatus(VrEmuTms9918* tms9918);
 VR_EMU_TMS9918_DLLEXPORT
 void vrEmuTms9918InterruptSet(VrEmuTms9918* tms9918);
 
+/* Function:  vrEmuTms9918SetStatus
+ * --------------------
+ * set status flag
+ */
+VR_EMU_TMS9918_DLLEXPORT
+void vrEmuTms9918SetStatus(VrEmuTms9918* tms9918, uint8_t status);
 
 /* Function:  vrEmuTms9918ScanLine
  * ----------------------------------------
@@ -201,7 +207,7 @@ void vrEmuTms9918InterruptSet(VrEmuTms9918* tms9918);
  * pixels to be filled with TMS9918 color palette indexes (vrEmuTms9918Color)
  */
 VR_EMU_TMS9918_DLLEXPORT
-void vrEmuTms9918ScanLine(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X]);
+uint8_t vrEmuTms9918ScanLine(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X], uint8_t status);
 
 /* Function:  vrEmuTms9918RegValue
  * ----------------------------------------

@@ -1,7 +1,6 @@
+cmake_minimum_required(VERSION 3.12)
 
-
-add_library(vrEmuTms9918 vrEmuTms9918.c)
-add_library(vrEmuTms9918Util vrEmuTms9918Util.c)
+add_library(${LIBRARY} STATIC vrEmuTms9918.c vrEmuTms9918Util.c)
 
 if (WIN32)
   if (BUILD_SHARED_LIBS)
@@ -9,6 +8,6 @@ if (WIN32)
    endif()
 endif()
 
-target_include_directories (vrEmuTms9918 INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories (${LIBRARY} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(vrEmuTms9918Util PUBLIC vrEmuTms9918)
+target_link_libraries(${LIBRARY} PRIVATE pico_stdlib)
