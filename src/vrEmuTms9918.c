@@ -315,7 +315,7 @@ VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918WriteAddr)(VrEmuT
 
     if (data & 0x80) /* register */
     {
-      //if ((data & 0x78) == 0)
+      if ((data & 0x78) == 0)
       {
         int regIndex = data & 0x07;
         tms9918->registers[regIndex] = tms9918->regWriteStage0Value;
@@ -559,6 +559,89 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VrEmuTms9918* tms
   return status;
 }
 
+/* Function:  vrEmuTms9918TextScanLine
+ * ----------------------------------------
+ * generate a Text mode scanline
+ */
+static void __time_critical_func(vrEmuTms9918TextScanLine)(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
+{
+  const uint8_t tileY = y >> 3;   /* which name table row (0 - 23) */
+  const uint8_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
+
+  /* address in name table at the start of this row */
+  uint8_t* rowNamesTable = tms9918->vram + tmsNameTableAddr(tms9918) + tileY * TEXT_NUM_COLS;
+  const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918) + pattRow;
+
+  const vrEmuTms9918Color bgFgColor[2] = {
+    tmsMainBgColor(tms9918),
+    tmsMainFgColor(tms9918)
+  };
+
+  uint8_t* pixPtr = pixels;
+
+  /* fill the first and last 8 pixels with bg color */
+  memset(pixPtr, bgFgColor[0], TEXT_PADDING_PX);
+
+  pixPtr += TEXT_PADDING_PX;
+
+  for (uint8_t tileX = 0; tileX < TEXT_NUM_COLS; ++tileX)
+  {
+    const uint8_t pattByte = patternTable[*rowNamesTable++ * PATTERN_BYTES];
+
+    for (uint8_t pattBit = 7; pattBit > 1; --pattBit)
+    {
+      *pixPtr++ = bgFgColor[(pattByte >> pattBit) & 0x01];
+    }
+  }
+  /* fill the last 8 pixels with bg color */
+  memset(pixPtr, bgFgColor[0], TEXT_PADDING_PX);
+}
+
+/* Function:  vrEmuTms9918Text80ScanLine
+ * ----------------------------------------
+ * generate an 80-column text mode scanline
+ */
+static void __time_critical_func(vrEmuTms9918Text80ScanLine)(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
+{
+  const uint8_t tileY = y >> 3;   /* which name table row (0 - 23) */
+  const uint8_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
+
+  /* address in name table at the start of this row */
+
+  // Register 0x0A for text80 name table
+
+  uint8_t* rowNamesTable = tms9918->vram /*+ tmsNameTableAddr(tms9918)*/ + tileY * TEXT80_NUM_COLS;
+  const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918) + pattRow;
+
+  const vrEmuTms9918Color bgColor = TMS_DK_BLUE;//tmsMainBgColor(tms9918);
+  const vrEmuTms9918Color fgColor = TMS_WHITE;//tmsMainFgColor(tms9918);
+
+  const uint8_t bgFgColor[4] =
+  {
+    (bgColor << 4) | bgColor,
+    (bgColor << 4) | fgColor,
+    (fgColor << 4) | bgColor,
+    (fgColor << 4) | fgColor
+  };
+
+  uint8_t* pixPtr = pixels;
+
+  /* fill the first and last 16 pixels with bg color */
+  memset(pixPtr, bgFgColor[0], TEXT_PADDING_PX);
+
+  pixPtr += TEXT_PADDING_PX;
+
+  for (uint8_t tileX = 0; tileX < TEXT80_NUM_COLS; ++tileX)
+  {
+    uint8_t pattByte = patternTable[*rowNamesTable++ * PATTERN_BYTES];
+    for (uint8_t pattBit = 6; pattBit > 1; pattBit -= 2)
+    {
+      *pixPtr++ = bgFgColor[(pattByte >> pattBit) & 0x03];
+    }
+  }
+
+  memset(pixPtr, bgFgColor[0], TEXT_PADDING_PX);
+}
 
 /* Function:  vrEmuTms9918GraphicsIScanLine
  * ----------------------------------------
@@ -636,41 +719,6 @@ static void __time_critical_func(vrEmuTms9918GraphicsIIScanLine)(VrEmuTms9918* t
   }
 }
 
-/* Function:  vrEmuTms9918TextScanLine
- * ----------------------------------------
- * generate a Text mode scanline
- */
-static void __time_critical_func(vrEmuTms9918TextScanLine)(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
-{
-  const uint8_t tileY = y >> 3;   /* which name table row (0 - 23) */
-  const uint8_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
-
-  /* address in name table at the start of this row */
-  const uint8_t* rowNamesTable = tms9918->vram + tmsNameTableAddr(tms9918) + tileY * TEXT_NUM_COLS;
-  const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918) + pattRow;
-
-  const vrEmuTms9918Color bgFgColor[2] = {
-    tmsMainBgColor(tms9918),
-    tmsMainFgColor(tms9918)
-  };
-
-  /* fill the first 8 pixels with bg color */
-  memset(pixels, bgFgColor[0], TEXT_PADDING_PX);
-  uint8_t* pixPtr = pixels + TEXT_PADDING_PX;
-
-  for (uint8_t tileX = 0; tileX < TEXT_NUM_COLS; ++tileX)
-  {
-    const uint8_t pattByte = patternTable[*rowNamesTable++ * PATTERN_BYTES];
-
-    for (uint8_t pattBit = 7; pattBit > 1; --pattBit)
-    {
-      *pixPtr++ = bgFgColor[(pattByte >> pattBit) & 0x01];
-    }
-  }
-  /* fill the last 8 pixels with bg color */
-  memset(pixPtr, bgFgColor[0], TEXT_PADDING_PX);
-}
-
 /* Function:  vrEmuTms9918MulticolorScanLine
  * ----------------------------------------
  * generate a Multicolor mode scanline
@@ -695,51 +743,6 @@ static void __time_critical_func(vrEmuTms9918MulticolorScanLine)(VrEmuTms9918* t
     *pixPtr++ = palPtr[0x0];
   }
 }
-
-/* Function:  vrEmuTms9918Text80ScanLine
- * ----------------------------------------
- * generate a Text mode scanline
- */
-static void __time_critical_func(vrEmuTms9918Text80ScanLine)(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
-{
-  const uint8_t tileY = y >> 3;   /* which name table row (0 - 23) */
-  const uint8_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
-
-  /* address in name table at the start of this row */
-
-  // Register 0x0A for text80 name table
-
-  const uint8_t* rowNamesTable = tms9918->vram /*+ tmsNameTableAddr(tms9918)*/ + tileY * TEXT80_NUM_COLS;
-  const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918) + pattRow;
-
-  const vrEmuTms9918Color bgColor = TMS_DK_BLUE;//tmsMainBgColor(tms9918);
-  const vrEmuTms9918Color fgColor = TMS_WHITE;//tmsMainFgColor(tms9918);
-
-  const uint8_t bgFgColor[4] =
-  {
-    bgColor << 4 | bgColor,
-    bgColor << 4 | fgColor,
-    fgColor << 4 | bgColor,
-    fgColor << 4 | fgColor
-  };
-
-  /* fill the first and last 16 pixels with bg color */
-  memset(pixels, bgFgColor[0], TEXT_PADDING_PX);
-
-  uint8_t* pixPtr = pixels + TEXT_PADDING_PX;
-
-  for (uint8_t tileX = 0; tileX < TEXT80_NUM_COLS; ++tileX)
-  {
-    uint8_t pattByte = patternTable[*rowNamesTable++ * PATTERN_BYTES];
-    for (uint8_t pattBit = 6; pattBit > 1; pattBit -= 2)
-    {
-      *pixPtr++ = bgFgColor[(pattByte >> pattBit) & 0x03];
-    }
-  }
-
-  memset(pixPtr, bgFgColor[0], TEXT_PADDING_PX);
-}
-
 
 /* Function:  vrEmuTms9918ScanLine
  * ----------------------------------------
