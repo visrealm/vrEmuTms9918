@@ -45,6 +45,19 @@
 #define VR_EMU_TMS9918_DLLEXPORT_CONST VR_EMU_TMS9918_DLLEXPORT
 #endif
 
+#if VR_EMU_TMS9918_SINGLE_INSTANCE
+#define VR_EMU_INST_ARG
+#define VR_EMU_INST_ONLY_ARG
+#define VR_EMU_INST
+#define VR_EMU_INST_ONLY
+#else
+#define VR_EMU_INST_ARG VrEmuTms9918* tms9918,
+#define VR_EMU_INST_ONLY_ARG VrEmuTms9918* tms9918
+#define VR_EMU_INST tms9918,
+#define VR_EMU_INST_ONLY tms9918
+#endif
+
+
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -108,6 +121,17 @@ typedef enum
 /* PUBLIC INTERFACE
  * ---------------------------------------- */
 
+#if VR_EMU_TMS9918_SINGLE_INSTANCE
+
+ /* Function:  vrEmuTms9918Init
+  * --------------------
+  * initialize the TMS9918 library in single-instance mode
+  */
+VR_EMU_TMS9918_DLLEXPORT
+void vrEmuTms9918Init();
+
+#else
+
  /* Function:  vrEmuTms9918New
   * --------------------
   * create a new TMS9918
@@ -115,12 +139,14 @@ typedef enum
 VR_EMU_TMS9918_DLLEXPORT
 VrEmuTms9918* vrEmuTms9918New();
 
+#endif
+
 /* Function:  vrEmuTms9918Reset
   * --------------------
   * reset the new TMS9918
   */
 VR_EMU_TMS9918_DLLEXPORT
-void vrEmuTms9918Reset(VrEmuTms9918* tms9918);
+void vrEmuTms9918Reset(VR_EMU_INST_ONLY_ARG);
 
 /* Function:  vrEmuTms9918Destroy
  * --------------------
@@ -129,7 +155,7 @@ void vrEmuTms9918Reset(VrEmuTms9918* tms9918);
  * tms9918: tms9918 object to destroy / clean up
  */
 VR_EMU_TMS9918_DLLEXPORT
-void vrEmuTms9918Destroy(VrEmuTms9918* tms9918);
+void vrEmuTms9918Destroy(VR_EMU_INST_ONLY_ARG);
 
 /* Function:  vrEmuTms9918WriteAddr
  * --------------------
@@ -138,7 +164,7 @@ void vrEmuTms9918Destroy(VrEmuTms9918* tms9918);
  * uint8_t: the data (DB0 -> DB7) to send
  */
 VR_EMU_TMS9918_DLLEXPORT
-void vrEmuTms9918WriteAddr(VrEmuTms9918* tms9918, uint8_t data);
+void vrEmuTms9918WriteAddr(VR_EMU_INST_ARG uint8_t data);
 
 /* Function:  vrEmuTms9918WriteData
  * --------------------
@@ -147,28 +173,28 @@ void vrEmuTms9918WriteAddr(VrEmuTms9918* tms9918, uint8_t data);
  * uint8_t: the data (DB0 -> DB7) to send
  */
 VR_EMU_TMS9918_DLLEXPORT
-void vrEmuTms9918WriteData(VrEmuTms9918* tms9918, uint8_t data);
+void vrEmuTms9918WriteData(VR_EMU_INST_ARG uint8_t data);
 
 /* Function:  vrEmuTms9918ReadStatus
  * --------------------
  * read from the status register
  */
 VR_EMU_TMS9918_DLLEXPORT
-uint8_t vrEmuTms9918ReadStatus(VrEmuTms9918* tms9918);
+uint8_t vrEmuTms9918ReadStatus(VR_EMU_INST_ONLY_ARG);
 
 /* Function:  vrEmuTms9918PeekStatus
  * --------------------
  * read from the status register without resetting it
  */
 VR_EMU_TMS9918_DLLEXPORT
-uint8_t vrEmuTms9918PeekStatus(VrEmuTms9918* tms9918);
+uint8_t vrEmuTms9918PeekStatus(VR_EMU_INST_ONLY_ARG);
 
 /* Function:  vrEmuTms9918ReadData
  * --------------------
  * read data (mode = 0) from the tms9918
  */
 VR_EMU_TMS9918_DLLEXPORT
-uint8_t vrEmuTms9918ReadData(VrEmuTms9918* tms9918);
+uint8_t vrEmuTms9918ReadData(VR_EMU_INST_ONLY_ARG);
 
 /* Function:  vrEmuTms9918ReadDataNoInc
  * --------------------
@@ -176,7 +202,7 @@ uint8_t vrEmuTms9918ReadData(VrEmuTms9918* tms9918);
  * don't increment the address pointer
  */
 VR_EMU_TMS9918_DLLEXPORT
-uint8_t vrEmuTms9918ReadDataNoInc(VrEmuTms9918* tms9918);
+uint8_t vrEmuTms9918ReadDataNoInc(VR_EMU_INST_ONLY_ARG);
 
 
 /* Function:  vrEmuTms9918InterruptStatus
@@ -184,21 +210,21 @@ uint8_t vrEmuTms9918ReadDataNoInc(VrEmuTms9918* tms9918);
  * return true if both INT status and INT control set
  */
 VR_EMU_TMS9918_DLLEXPORT
-bool vrEmuTms9918InterruptStatus(VrEmuTms9918* tms9918);
+bool vrEmuTms9918InterruptStatus(VR_EMU_INST_ONLY_ARG);
 
 /* Function:  vrEmuTms9918InterruptSet
  * --------------------
  * set interrupt flag
  */
 VR_EMU_TMS9918_DLLEXPORT
-void vrEmuTms9918InterruptSet(VrEmuTms9918* tms9918);
+void vrEmuTms9918InterruptSet(VR_EMU_INST_ONLY_ARG);
 
 /* Function:  vrEmuTms9918SetStatus
  * --------------------
  * set status flag
  */
 VR_EMU_TMS9918_DLLEXPORT
-void vrEmuTms9918SetStatus(VrEmuTms9918* tms9918, uint8_t status);
+void vrEmuTms9918SetStatus(VR_EMU_INST_ARG uint8_t status);
 
 /* Function:  vrEmuTms9918ScanLine
  * ----------------------------------------
@@ -207,21 +233,21 @@ void vrEmuTms9918SetStatus(VrEmuTms9918* tms9918, uint8_t status);
  * pixels to be filled with TMS9918 color palette indexes (vrEmuTms9918Color)
  */
 VR_EMU_TMS9918_DLLEXPORT
-uint8_t vrEmuTms9918ScanLine(VrEmuTms9918* tms9918, uint8_t y, uint8_t pixels[TMS9918_PIXELS_X], uint8_t status);
+uint8_t vrEmuTms9918ScanLine(VR_EMU_INST_ARG uint8_t y, uint8_t pixels[TMS9918_PIXELS_X], uint8_t status);
 
 /* Function:  vrEmuTms9918RegValue
  * ----------------------------------------
  * return a reigister value
  */
 VR_EMU_TMS9918_DLLEXPORT
-uint8_t vrEmuTms9918RegValue(VrEmuTms9918* tms9918, vrEmuTms9918Register reg);
+uint8_t vrEmuTms9918RegValue(VR_EMU_INST_ARG vrEmuTms9918Register reg);
 
 /* Function:  vrEmuTms9918WriteRegValue
  * ----------------------------------------
  * write a reigister value
  */
 VR_EMU_TMS9918_DLLEXPORT
-void vrEmuTms9918WriteRegValue(VrEmuTms9918* tms9918, vrEmuTms9918Register reg, uint8_t value);
+void vrEmuTms9918WriteRegValue(VR_EMU_INST_ARG vrEmuTms9918Register reg, uint8_t value);
 
 
 /* Function:  vrEmuTms9918VramValue
@@ -229,7 +255,7 @@ void vrEmuTms9918WriteRegValue(VrEmuTms9918* tms9918, vrEmuTms9918Register reg, 
  * return a value from vram
  */
 VR_EMU_TMS9918_DLLEXPORT
-uint8_t vrEmuTms9918VramValue(VrEmuTms9918* tms9918, uint16_t addr);
+uint8_t vrEmuTms9918VramValue(VR_EMU_INST_ARG uint16_t addr);
 
 
 /* Function:  vrEmuTms9918DisplayEnabled
@@ -237,7 +263,7 @@ uint8_t vrEmuTms9918VramValue(VrEmuTms9918* tms9918, uint16_t addr);
   * check BLANK flag
   */
 VR_EMU_TMS9918_DLLEXPORT
-bool vrEmuTms9918DisplayEnabled(VrEmuTms9918* tms9918);
+bool vrEmuTms9918DisplayEnabled(VR_EMU_INST_ONLY_ARG);
 
 
 /* Function:  vrEmuTms9918DisplayMode
@@ -245,7 +271,7 @@ bool vrEmuTms9918DisplayEnabled(VrEmuTms9918* tms9918);
   * current display mode
   */
 VR_EMU_TMS9918_DLLEXPORT
-vrEmuTms9918Mode vrEmuTms9918DisplayMode(VrEmuTms9918* tms9918);
+vrEmuTms9918Mode vrEmuTms9918DisplayMode(VR_EMU_INST_ONLY_ARG);
 
 
 #endif // _VR_EMU_TMS9918_H_

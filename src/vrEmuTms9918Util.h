@@ -53,48 +53,48 @@ VR_EMU_TMS9918_DLLEXPORT_CONST uint32_t vrEmuTms9918Palette[];
 /*
  * Write a register value
  */
-inline static void vrEmuTms9918WriteRegisterValue(VrEmuTms9918* tms9918, vrEmuTms9918Register reg, uint8_t value)
+inline static void vrEmuTms9918WriteRegisterValue(VR_EMU_INST_ARG vrEmuTms9918Register reg, uint8_t value)
 {
-  vrEmuTms9918WriteAddr(tms9918, value);
-  vrEmuTms9918WriteAddr(tms9918, 0x80 | (uint8_t)reg);
+  vrEmuTms9918WriteAddr(VR_EMU_INST value);
+  vrEmuTms9918WriteAddr(VR_EMU_INST 0x80 | (uint8_t)reg);
 }
 
 /*
  * Set current VRAM address for reading
  */
-inline static void vrEmuTms9918SetAddressRead(VrEmuTms9918* tms9918, uint16_t addr)
+inline static void vrEmuTms9918SetAddressRead(VR_EMU_INST_ARG uint16_t addr)
 {
-  vrEmuTms9918WriteAddr(tms9918, addr & 0x00ff);
-  vrEmuTms9918WriteAddr(tms9918, ((addr & 0xff00) >> 8));
+  vrEmuTms9918WriteAddr(VR_EMU_INST addr & 0x00ff);
+  vrEmuTms9918WriteAddr(VR_EMU_INST ((addr & 0xff00) >> 8));
 }
 
 /*
  * Set current VRAM address for writing
  */
-inline static void vrEmuTms9918SetAddressWrite(VrEmuTms9918* tms9918, uint16_t addr)
+inline static void vrEmuTms9918SetAddressWrite(VR_EMU_INST_ARG uint16_t addr)
 {
-  vrEmuTms9918SetAddressRead(tms9918, addr | 0x4000);
+  vrEmuTms9918SetAddressRead(VR_EMU_INST addr | 0x4000);
 }
 
 /*
  * Write a series of bytes to the VRAM
  */
-inline static void vrEmuTms9918WriteBytes(VrEmuTms9918* tms9918, const uint8_t* bytes, size_t numBytes)
+inline static void vrEmuTms9918WriteBytes(VR_EMU_INST_ARG const uint8_t* bytes, size_t numBytes)
 {
   for (size_t i = 0; i < numBytes; ++i)
   {
-    vrEmuTms9918WriteData(tms9918, bytes[i]);
+    vrEmuTms9918WriteData(VR_EMU_INST bytes[i]);
   }
 }
 
 /*
  * Write a series of bytes to the VRAM
  */
-inline static void vrEmuTms9918WriteByteRpt(VrEmuTms9918* tms9918, uint8_t byte, size_t rpt)
+inline static void vrEmuTms9918WriteByteRpt(VR_EMU_INST_ARG uint8_t byte, size_t rpt)
 {
   for (size_t i = 0; i < rpt; ++i)
   {
-    vrEmuTms9918WriteData(tms9918, byte);
+    vrEmuTms9918WriteData(VR_EMU_INST byte);
   }
 }
 
@@ -102,24 +102,24 @@ inline static void vrEmuTms9918WriteByteRpt(VrEmuTms9918* tms9918, uint8_t byte,
 /*
  * Write a series of chars to the VRAM
  */
-inline static void vrEmuTms9918WriteString(VrEmuTms9918* tms9918, const char* str)
+inline static void vrEmuTms9918WriteString(VR_EMU_INST_ARG const char* str)
 {
   size_t len = strlen(str);
   for (size_t i = 0; i < len; ++i)
   {
-    vrEmuTms9918WriteData(tms9918, str[i]);
+    vrEmuTms9918WriteData(VR_EMU_INST str[i]);
   }
 }
 
 /*
  * Write a series of chars to the VRAM with offset
  */
-inline static void vrEmuTms9918WriteStringOffset(VrEmuTms9918* tms9918, const char* str, uint8_t offset)
+inline static void vrEmuTms9918WriteStringOffset(VR_EMU_INST_ARG const char* str, uint8_t offset)
 {
   size_t len = strlen(str);
   for (size_t i = 0; i < len; ++i)
   {
-    vrEmuTms9918WriteData(tms9918, str[i] + offset);
+    vrEmuTms9918WriteData(VR_EMU_INST str[i] + offset);
   }
 }
 
@@ -134,49 +134,49 @@ inline static uint8_t vrEmuTms9918FgBgColor(vrEmuTms9918Color fg, vrEmuTms9918Co
 /*
  * Set name table address
  */
-inline static void vrEmuTms9918SetNameTableAddr(VrEmuTms9918* tms9918, uint16_t addr)
+inline static void vrEmuTms9918SetNameTableAddr(VR_EMU_INST_ARG uint16_t addr)
 {
-  vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_NAME_TABLE, addr >> 10);
+  vrEmuTms9918WriteRegisterValue(VR_EMU_INST TMS_REG_NAME_TABLE, addr >> 10);
 }
 
 /*
  * Set color table address
  */
-inline static void vrEmuTms9918SetColorTableAddr(VrEmuTms9918* tms9918, uint16_t addr)
+inline static void vrEmuTms9918SetColorTableAddr(VR_EMU_INST_ARG uint16_t addr)
 {
-  vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_COLOR_TABLE, (uint8_t)(addr >> 6));
+  vrEmuTms9918WriteRegisterValue(VR_EMU_INST TMS_REG_COLOR_TABLE, (uint8_t)(addr >> 6));
 }
 
 /*
  * Set pattern table address
  */
-inline static void vrEmuTms9918SetPatternTableAddr(VrEmuTms9918* tms9918, uint16_t addr)
+inline static void vrEmuTms9918SetPatternTableAddr(VR_EMU_INST_ARG uint16_t addr)
 {
-  vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_PATTERN_TABLE, addr >> 11);
+  vrEmuTms9918WriteRegisterValue(VR_EMU_INST TMS_REG_PATTERN_TABLE, addr >> 11);
 }
 
 /*
  * Set sprite attribute table address
  */
-inline static void vrEmuTms9918SetSpriteAttrTableAddr(VrEmuTms9918* tms9918, uint16_t addr)
+inline static void vrEmuTms9918SetSpriteAttrTableAddr(VR_EMU_INST_ARG uint16_t addr)
 {
-  vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_SPRITE_ATTR_TABLE, (uint8_t)(addr >> 7));
+  vrEmuTms9918WriteRegisterValue(VR_EMU_INST TMS_REG_SPRITE_ATTR_TABLE, (uint8_t)(addr >> 7));
 }
 
 /*
  * Set sprite pattern table address
  */
-inline static void vrEmuTms9918SetSpritePattTableAddr(VrEmuTms9918* tms9918, uint16_t addr)
+inline static void vrEmuTms9918SetSpritePattTableAddr(VR_EMU_INST_ARG uint16_t addr)
 {
-  vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_SPRITE_PATT_TABLE, addr >> 11);
+  vrEmuTms9918WriteRegisterValue(VR_EMU_INST TMS_REG_SPRITE_PATT_TABLE, addr >> 11);
 }
 
 /*
  * Set foreground (text mode) and background colors
  */
-inline static void vrEmuTms9918SetFgBgColor(VrEmuTms9918* tms9918, vrEmuTms9918Color fg, vrEmuTms9918Color bg)
+inline static void vrEmuTms9918SetFgBgColor(VR_EMU_INST_ARG vrEmuTms9918Color fg, vrEmuTms9918Color bg)
 {
-  vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_FG_BG_COLOR, vrEmuTms9918FgBgColor(fg, bg));
+  vrEmuTms9918WriteRegisterValue(VR_EMU_INST TMS_REG_FG_BG_COLOR, vrEmuTms9918FgBgColor(fg, bg));
 }
 
 
@@ -184,12 +184,12 @@ inline static void vrEmuTms9918SetFgBgColor(VrEmuTms9918* tms9918, vrEmuTms9918C
  * Initialise for Graphics I mode
  */
 VR_EMU_TMS9918_DLLEXPORT
-void vrEmuTms9918InitialiseGfxI(VrEmuTms9918* tms9918);
+void vrEmuTms9918InitialiseGfxI(VR_EMU_INST_ONLY_ARG);
 
 /*
  * Initialise for Graphics II mode
  */
 VR_EMU_TMS9918_DLLEXPORT
-void vrEmuTms9918InitialiseGfxII(VrEmuTms9918* tms9918);
+void vrEmuTms9918InitialiseGfxII(VR_EMU_INST_ONLY_ARG);
 
 #endif // _VR_EMU_TMS9918_UTIL_H_

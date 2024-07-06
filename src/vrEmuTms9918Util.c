@@ -42,44 +42,44 @@ VR_EMU_TMS9918_DLLEXPORT_CONST uint32_t vrEmuTms9918Palette[] = {
   0xffffffff  /* white */
 };
 
-static void clearTmsRam(VrEmuTms9918* tms9918)
+static void clearTmsRam(VR_EMU_INST_ONLY_ARG)
 {
-  vrEmuTms9918SetAddressWrite(tms9918, 0x0000);
-  vrEmuTms9918WriteByteRpt(tms9918, 0x00, 0x4000);
+  vrEmuTms9918SetAddressWrite(VR_EMU_INST 0x0000);
+  vrEmuTms9918WriteByteRpt(VR_EMU_INST 0x00, 0x4000);
 
-  vrEmuTms9918SetAddressWrite(tms9918, TMS_DEFAULT_VRAM_SPRITE_ATTR_ADDRESS);
+  vrEmuTms9918SetAddressWrite(VR_EMU_INST TMS_DEFAULT_VRAM_SPRITE_ATTR_ADDRESS);
   for (int i = 0; i < 32; ++i)
   {
-    vrEmuTms9918WriteData(tms9918, LAST_SPRITE_YPOS);
-    vrEmuTms9918WriteData(tms9918, 0);
-    vrEmuTms9918WriteData(tms9918, 0);
-    vrEmuTms9918WriteData(tms9918, 0);
+    vrEmuTms9918WriteData(VR_EMU_INST LAST_SPRITE_YPOS);
+    vrEmuTms9918WriteData(VR_EMU_INST 0);
+    vrEmuTms9918WriteData(VR_EMU_INST 0);
+    vrEmuTms9918WriteData(VR_EMU_INST 0);
   }
 }
 
 VR_EMU_TMS9918_DLLEXPORT
-void vrEmuTms9918InitialiseGfxI(VrEmuTms9918* tms9918)
+void vrEmuTms9918InitialiseGfxI(VR_EMU_INST_ONLY_ARG)
 {
-  vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_0, TMS_R0_EXT_VDP_DISABLE | TMS_R0_MODE_GRAPHICS_I);
-  vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_1, TMS_R1_RAM_16K | TMS_R1_MODE_GRAPHICS_I | TMS_R1_RAM_16K | TMS_R1_DISP_ACTIVE | TMS_R1_INT_ENABLE);
-  vrEmuTms9918SetNameTableAddr(tms9918, TMS_DEFAULT_VRAM_NAME_ADDRESS);
-  vrEmuTms9918SetColorTableAddr(tms9918, TMS_DEFAULT_VRAM_COLOR_ADDRESS);
-  vrEmuTms9918SetPatternTableAddr(tms9918, TMS_DEFAULT_VRAM_PATT_ADDRESS);
-  vrEmuTms9918SetSpriteAttrTableAddr(tms9918, TMS_DEFAULT_VRAM_SPRITE_ATTR_ADDRESS);
-  vrEmuTms9918SetSpritePattTableAddr(tms9918, TMS_DEFAULT_VRAM_SPRITE_PATT_ADDRESS);
-  vrEmuTms9918SetFgBgColor(tms9918, TMS_BLACK, TMS_CYAN);
+  vrEmuTms9918WriteRegisterValue(VR_EMU_INST TMS_REG_0, TMS_R0_EXT_VDP_DISABLE | TMS_R0_MODE_GRAPHICS_I);
+  vrEmuTms9918WriteRegisterValue(VR_EMU_INST TMS_REG_1, TMS_R1_RAM_16K | TMS_R1_MODE_GRAPHICS_I | TMS_R1_RAM_16K | TMS_R1_DISP_ACTIVE | TMS_R1_INT_ENABLE);
+  vrEmuTms9918SetNameTableAddr(VR_EMU_INST TMS_DEFAULT_VRAM_NAME_ADDRESS);
+  vrEmuTms9918SetColorTableAddr(VR_EMU_INST TMS_DEFAULT_VRAM_COLOR_ADDRESS);
+  vrEmuTms9918SetPatternTableAddr(VR_EMU_INST TMS_DEFAULT_VRAM_PATT_ADDRESS);
+  vrEmuTms9918SetSpriteAttrTableAddr(VR_EMU_INST TMS_DEFAULT_VRAM_SPRITE_ATTR_ADDRESS);
+  vrEmuTms9918SetSpritePattTableAddr(VR_EMU_INST TMS_DEFAULT_VRAM_SPRITE_PATT_ADDRESS);
+  vrEmuTms9918SetFgBgColor(VR_EMU_INST TMS_BLACK, TMS_CYAN);
 
-  clearTmsRam(tms9918);
+  clearTmsRam(VR_EMU_INST_ONLY);
 }
 
 
 
 VR_EMU_TMS9918_DLLEXPORT
-void vrEmuTms9918InitialiseGfxII(VrEmuTms9918* tms9918)
+void vrEmuTms9918InitialiseGfxII(VR_EMU_INST_ONLY_ARG)
 {
-  vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_0, TMS_R0_EXT_VDP_DISABLE | TMS_R0_MODE_GRAPHICS_II);
-  vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_1, TMS_R1_RAM_16K | TMS_R1_MODE_GRAPHICS_II | TMS_R1_RAM_16K | TMS_R1_DISP_ACTIVE | TMS_R1_INT_ENABLE);
-  vrEmuTms9918SetNameTableAddr(tms9918, TMS_DEFAULT_VRAM_NAME_ADDRESS);
+  vrEmuTms9918WriteRegisterValue(VR_EMU_INST TMS_REG_0, TMS_R0_EXT_VDP_DISABLE | TMS_R0_MODE_GRAPHICS_II);
+  vrEmuTms9918WriteRegisterValue(VR_EMU_INST TMS_REG_1, TMS_R1_RAM_16K | TMS_R1_MODE_GRAPHICS_II | TMS_R1_RAM_16K | TMS_R1_DISP_ACTIVE | TMS_R1_INT_ENABLE);
+  vrEmuTms9918SetNameTableAddr(VR_EMU_INST TMS_DEFAULT_VRAM_NAME_ADDRESS);
 
   /* in Graphics II, Registers 3 and 4 work differently
    *
@@ -92,19 +92,19 @@ void vrEmuTms9918InitialiseGfxII(VrEmuTms9918* tms9918)
    *  0x07 = 0x2000
    */
 
-  vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_COLOR_TABLE, 0x7f);
-  vrEmuTms9918WriteRegisterValue(tms9918, TMS_REG_PATTERN_TABLE, 0x07);
+  vrEmuTms9918WriteRegisterValue(VR_EMU_INST TMS_REG_COLOR_TABLE, 0x7f);
+  vrEmuTms9918WriteRegisterValue(VR_EMU_INST TMS_REG_PATTERN_TABLE, 0x07);
 
-  vrEmuTms9918SetSpriteAttrTableAddr(tms9918, TMS_DEFAULT_VRAM_SPRITE_ATTR_ADDRESS);
-  vrEmuTms9918SetSpritePattTableAddr(tms9918, TMS_DEFAULT_VRAM_SPRITE_PATT_ADDRESS);
-  vrEmuTms9918SetFgBgColor(tms9918, TMS_BLACK, TMS_CYAN);
+  vrEmuTms9918SetSpriteAttrTableAddr(VR_EMU_INST TMS_DEFAULT_VRAM_SPRITE_ATTR_ADDRESS);
+  vrEmuTms9918SetSpritePattTableAddr(VR_EMU_INST TMS_DEFAULT_VRAM_SPRITE_PATT_ADDRESS);
+  vrEmuTms9918SetFgBgColor(VR_EMU_INST TMS_BLACK, TMS_CYAN);
 
-  clearTmsRam(tms9918);
+  clearTmsRam(VR_EMU_INST_ONLY);
 
-  vrEmuTms9918SetAddressWrite(tms9918, TMS_DEFAULT_VRAM_NAME_ADDRESS);
+  vrEmuTms9918SetAddressWrite(VR_EMU_INST TMS_DEFAULT_VRAM_NAME_ADDRESS);
   for (int i = 0; i < 768; ++i)
   {
-    vrEmuTms9918WriteData(tms9918, i & 0xff);
+    vrEmuTms9918WriteData(VR_EMU_INST i & 0xff);
   }
 
 }
