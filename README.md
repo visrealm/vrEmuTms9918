@@ -22,7 +22,12 @@ The goal is to emulate all documented modes listed in the [TMS9918A/TMS9928A/TMS
 
 ## PICO9918
 
-This library is also being used in the pico9918 project. A drop-in replacement for a physical TMS9918A powered by a Raspberry Pi Pico.
+This library is also being used in the PICO9918 project. A drop-in replacement for a physical TMS9918A powered by a Raspberry Pi Pico.
+
+The PICO9918 running in an original TI-99/4A:
+
+### Don't mess with Texas!
+[![PICO9918 Prototype - Don't mess with Texas](https://img.visualrealmsoftware.com/youtube/thumb/ljNRFKbOGJs)](https://youtu.be/ljNRFKbOGJs)
 
 See [github.com/visrealm/pico9918](https://github.com/visrealm/pico9918)
 
