@@ -31,10 +31,10 @@ void vrEmuTms9918Init()
 
 #else
 
-/* Function:  vrEmuTms9918New
- * ----------------------------------------
- * create a new TMS9918
- */
+ /* Function:  vrEmuTms9918New
+  * ----------------------------------------
+  * create a new TMS9918
+  */
 VR_EMU_TMS9918_DLLEXPORT VrEmuTms9918* vrEmuTms9918New()
 {
   VrEmuTms9918* tms9918 = (VrEmuTms9918*)malloc(sizeof(VrEmuTms9918));
@@ -354,13 +354,13 @@ static inline uint32_t tmsTestCollisionMask(uint8_t xPos, uint32_t spritePixels,
   int rowSpriteBitsWordBit = xPos & 0x1f;
   uint32_t validPixels = 0;
 
-  validPixels = ~tms9918->rowSpriteBits[rowSpriteBitsWord] & (spritePixels >> rowSpriteBitsWordBit);
+  validPixels = (~tms9918->rowSpriteBits[rowSpriteBitsWord]) & (spritePixels >> rowSpriteBitsWordBit);
   tms9918->rowSpriteBits[rowSpriteBitsWord] |= validPixels;
   validPixels <<= rowSpriteBitsWordBit;
 
   if ((rowSpriteBitsWordBit + spriteWidth) > 32)
   {
-    uint32_t right = ~tms9918->rowSpriteBits[rowSpriteBitsWord + 1] & (spritePixels << (32 - rowSpriteBitsWordBit));
+    uint32_t right = (~tms9918->rowSpriteBits[rowSpriteBitsWord + 1]) & (spritePixels << (32 - rowSpriteBitsWordBit));
     tms9918->rowSpriteBits[rowSpriteBitsWord + 1] |= right;
     validPixels |= (right >> (32 - rowSpriteBitsWordBit));
   }
@@ -398,7 +398,7 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
   const uint16_t spritePatternAddr = tms9918->spritePatternTableAddr;
 
   uint8_t spritesShown = 0;
-  uint8_t tempStatus = 0;
+  uint8_t tempStatus = 0x1f;
 
   uint8_t* spriteAttr = tms9918->vram + spriteAttrTableAddr;
   for (uint8_t spriteIdx = 0; spriteIdx < MAX_SPRITES; ++spriteIdx)
@@ -458,7 +458,7 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
     /* have we exceeded the scanline sprite limit? */
     if (++spritesShown > MAX_SCANLINE_SPRITES)
     {
-      if ((tempStatus & (STATUS_5S | STATUS_INT)) == 0)
+      if ((tempStatus & STATUS_5S) == 0)
       {
         tempStatus &= 0xe0;
         tempStatus |= STATUS_5S | spriteIdx;

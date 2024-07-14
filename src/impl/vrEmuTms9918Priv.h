@@ -145,7 +145,7 @@ inline void vrEmuTms9918WriteAddrImpl(VR_EMU_INST_ARG uint8_t data)
 inline uint8_t vrEmuTms9918ReadStatusImpl(VR_EMU_INST_ONLY_ARG)
 {
   const uint8_t tmpStatus = tms9918->status;
-  tms9918->status &= ~(STATUS_INT | STATUS_COL);
+  tms9918->status = 0x1f;
   tms9918->regWriteStage = 0;
   return tmpStatus;
 }
