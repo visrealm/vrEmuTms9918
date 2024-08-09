@@ -393,6 +393,7 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
   const bool spriteMag = tms9918->spriteMag;
   const uint8_t spriteSize = tms9918->spriteSize;
   const bool sprite16 = spriteSize == 16;
+  const uint8_t spriteIdxMask = sprite16 ? 0xfc : 0xff;
   const uint8_t spriteSizePx = spriteSize * (spriteMag + 1);
   const uint16_t spriteAttrTableAddr = tms9918->spriteAttrTableAddr;
   const uint16_t spritePatternAddr = tms9918->spritePatternTableAddr;
@@ -468,7 +469,7 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
 
     /* sprite is visible on this line */
     const uint8_t spriteColor = spriteAttr[SPRITE_ATTR_COLOR] & 0x0f;
-    const uint8_t pattIdx = spriteAttr[SPRITE_ATTR_NAME];
+    const uint8_t pattIdx = spriteAttr[SPRITE_ATTR_NAME] & spriteIdxMask;
     const uint16_t pattOffset = spritePatternAddr + pattIdx * PATTERN_BYTES + (uint16_t)pattRow;
 
     const int16_t earlyClockOffset = (spriteAttr[SPRITE_ATTR_COLOR] & 0x80) ? -32 : 0;
