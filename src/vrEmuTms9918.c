@@ -409,11 +409,6 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
     /* stop processing when yPos == LAST_SPRITE_YPOS */
     if (yPos == LAST_SPRITE_YPOS)
     {
-      if ((tempStatus & STATUS_5S) == 0)
-      {
-        tempStatus &= 0xe0;
-        tempStatus |= spriteIdx;
-      }
       break;
     }
 
@@ -492,6 +487,13 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
       else
         pattMask = (pattMask << 8) | pattByte;
     }
+    
+    if (pattMask == 0)
+    {
+      spriteAttr += SPRITE_ATTR_BYTES;
+      continue;
+    }
+
     /* shift it into place (far left)*/
     pattMask <<= (32 - spriteSizePx);
 
@@ -636,8 +638,6 @@ static void __time_critical_func(vrEmuTms9918GraphicsIScanLine)(VR_EMU_INST_ARG 
 
   const uint8_t* patternTable = tms9918->vram + tms9918->patternTableAddr + pattRow;
   const uint8_t* colorTable = tms9918->vram + tms9918->colorTableAddr;
-
-  uint32_t* pixPtr = (uint32_t*)pixels;
 
   /* iterate over each tile in this row */
   for (uint8_t tileX = 0; tileX < GRAPHICS_NUM_COLS; ++tileX)
