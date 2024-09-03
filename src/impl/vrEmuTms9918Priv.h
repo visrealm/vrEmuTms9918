@@ -55,11 +55,23 @@
   * ---------------------- */
 struct vrEmuTMS9918_s
 {
-  /* the eight write-only registers */
-  uint8_t registers[TMS_NUM_REGISTERS];
+  /* video ram */
+  uint8_t vram[VRAM_SIZE];      // 0x0000-0x3FFF (16KB)
+  uint8_t gram1[0x2000];        // 0x4000-0x5FFF (8KB)
 
-  /* status register (read-only) */
-  uint8_t status;
+  /* 64 write-only registers */
+  uint8_t registers[0x40];      // 0x6000-0x6040
+
+  uint8_t gram2[0x1000 - 0x40]; // 0x6040-0x6FFF (~4KB)
+  uint8_t scanline;             // 0x7000
+  uint8_t blanking;             // 0x7001
+  uint8_t gram3[0x4000 - 0x02]; // 0x7002-0xAFFF (~16KB)
+
+  /* status registers (read-only) */
+  uint8_t status [0x10];        // 0xB000
+
+  uint8_t gram4[0x5000 - 0x10]; // 0xB010-0xFFFF (~20KB)
+  uint8_t wrksp[36];           // 0x10000 overflow for hidden workspace
 
   /* current address for cpu access (auto-increments) */
   uint16_t currentAddress;
@@ -73,25 +85,8 @@ struct vrEmuTMS9918_s
   /* buffered value */
   uint8_t readAheadBuffer;
 
-  bool interruptsEnabled;
-
-  /* current display mode */
-  vrEmuTms9918Mode mode;
-
-  /* cached values */
-  uint8_t spriteSize;
-  bool spriteMag;
-  uint16_t nameTableAddr;
-  uint16_t colorTableAddr;
-  uint16_t patternTableAddr;
-  uint16_t spriteAttrTableAddr;
-  uint16_t spritePatternTableAddr;
-  vrEmuTms9918Color mainBgColor;
-  vrEmuTms9918Color mainFgColor;
-  bool displayEnabled;
-
-  /* video ram */
-  uint8_t vram[VRAM_SIZE];
+  uint8_t lockedMask; // 0x07 when locked, 0x3F when unlocked
+  volatile uint8_t restart;
 
   uint32_t rowSpriteBits[TMS9918_PIXELS_X / 32]; /* collision mask */
 };
@@ -121,7 +116,7 @@ inline void vrEmuTms9918WriteAddrImpl(VR_EMU_INST_ARG uint8_t data)
 
     if (data & 0x80) /* register */
     {
-      if ((data & 0x78) == 0)
+      if ((data & 0x40) == 0) // Was 0x78, but we allow 64 registers = 0x40
       {
         vrEmuTms9918WriteRegValue(data, tms9918->regWriteStage0Value);
       }
@@ -144,10 +139,13 @@ inline void vrEmuTms9918WriteAddrImpl(VR_EMU_INST_ARG uint8_t data)
  */
 inline uint8_t vrEmuTms9918ReadStatusImpl(VR_EMU_INST_ONLY_ARG)
 {
-  const uint8_t tmpStatus = tms9918->status;
-  tms9918->status = 0x1f;
   tms9918->regWriteStage = 0;
-  return tmpStatus;
+  if ((tms9918->registers [0x0F] & 0x0F) == 0) {
+    const uint8_t tmpStatus = tms9918->status [0];
+    tms9918->status [0] = 0x1f;
+    return tmpStatus;
+  } else
+    return tms9918->status [tms9918->registers [0x0F] & 0x0F];
 }
 
 /* Function:  vrEmuTms9918PeekStatus
@@ -156,7 +154,7 @@ inline uint8_t vrEmuTms9918ReadStatusImpl(VR_EMU_INST_ONLY_ARG)
  */
 inline uint8_t vrEmuTms9918PeekStatusImpl(VR_EMU_INST_ONLY_ARG)
 {
-  return tms9918->status;
+  return tms9918->status [0];
 }
 
 /* Function:  vrEmuTms9918WriteData
@@ -200,7 +198,7 @@ inline uint8_t vrEmuTms9918ReadDataNoIncImpl(VR_EMU_INST_ONLY_ARG)
  */
 inline bool vrEmuTms9918InterruptStatusImpl(VR_EMU_INST_ONLY_ARG)
 {
-  return tms9918->interruptsEnabled && (tms9918->status & STATUS_INT);
+  return (tms9918->registers[TMS_REG_1] & TMS_R1_INT_ENABLE) && (tms9918->status [0] & STATUS_INT);
 }
 
 /* Function:  vrEmuTms9918InterruptSet
@@ -209,7 +207,7 @@ inline bool vrEmuTms9918InterruptStatusImpl(VR_EMU_INST_ONLY_ARG)
  */
 inline void vrEmuTms9918InterruptSetImpl(VR_EMU_INST_ONLY_ARG)
 {
-  tms9918->status |= STATUS_INT;
+  tms9918->status [0] |= STATUS_INT;
 }
 
 /* Function:  vrEmuTms9918SetStatus
@@ -219,5 +217,5 @@ inline void vrEmuTms9918InterruptSetImpl(VR_EMU_INST_ONLY_ARG)
 inline
 void vrEmuTms9918SetStatusImpl(VR_EMU_INST_ARG uint8_t status)
 {
-  tms9918->status = status;
+  tms9918->status [0] = status;
 }

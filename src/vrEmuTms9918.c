@@ -24,7 +24,7 @@ VrEmuTms9918* tms9918 = &tms9918Inst;
  * initialize the TMS9918 library in single-instance mode
  */
 VR_EMU_TMS9918_DLLEXPORT
-void vrEmuTms9918Init()
+void __time_critical_func(vrEmuTms9918Init)()
 {
   vrEmuTms9918Reset(tms9918);
 }
@@ -48,6 +48,18 @@ VR_EMU_TMS9918_DLLEXPORT VrEmuTms9918* vrEmuTms9918New()
 
 #endif
 
+
+vrEmuTms9918Mode r1Modes [] = { TMS_MODE_GRAPHICS_I, TMS_MODE_MULTICOLOR, TMS_MODE_TEXT, TMS_MODE_GRAPHICS_I };
+
+static inline vrEmuTms9918Mode tmsMode(VrEmuTms9918* tms9918)
+{
+  if (tms9918->registers[TMS_REG_0] & TMS_R0_MODE_GRAPHICS_II)
+    return TMS_MODE_GRAPHICS_II;
+  else if (tms9918->registers[TMS_REG_0] & TMS_R0_MODE_TEXT_80)
+    return TMS_MODE_TEXT80;
+  else
+    return r1Modes [(tms9918->registers[TMS_REG_1] & (TMS_R1_MODE_MULTICOLOR | TMS_R1_MODE_TEXT)) >> 3];
+}
 
 /* Function:  tmsSpriteSize
  * ----------------------------------------
@@ -82,7 +94,7 @@ static inline uint16_t tmsNameTableAddr(VrEmuTms9918* tms9918)
  */
 static inline uint16_t tmsColorTableAddr(VrEmuTms9918* tms9918)
 {
-  const uint8_t mask = (tms9918->mode == TMS_MODE_GRAPHICS_II) ? 0x80 : 0xff;
+  const uint8_t mask = (tmsMode(tms9918) == TMS_MODE_GRAPHICS_II) ? 0x80 : 0xff;
 
   return (tms9918->registers[TMS_REG_COLOR_TABLE] & mask) << 6;
 }
@@ -93,7 +105,7 @@ static inline uint16_t tmsColorTableAddr(VrEmuTms9918* tms9918)
  */
 static inline uint16_t tmsPatternTableAddr(VrEmuTms9918* tms9918)
 {
-  const uint8_t mask = (tms9918->mode == TMS_MODE_GRAPHICS_II) ? 0x04 : 0x07;
+  const uint8_t mask = (tmsMode(tms9918) == TMS_MODE_GRAPHICS_II) ? 0x04 : 0x07;
 
   return (tms9918->registers[TMS_REG_PATTERN_TABLE] & mask) << 11;
 }
@@ -132,7 +144,7 @@ static inline vrEmuTms9918Color tmsMainBgColor(VrEmuTms9918* tms9918)
 static inline vrEmuTms9918Color tmsMainFgColor(VrEmuTms9918* tms9918)
 {
   const vrEmuTms9918Color c = (vrEmuTms9918Color)(tms9918->registers[TMS_REG_FG_BG_COLOR] >> 4);
-  return c == TMS_TRANSPARENT ? tms9918->mainBgColor : c;
+  return c == TMS_TRANSPARENT ? tmsMainBgColor(tms9918) : c;
 }
 
 /* Function:  tmsFgColor
@@ -142,7 +154,7 @@ static inline vrEmuTms9918Color tmsMainFgColor(VrEmuTms9918* tms9918)
 static inline vrEmuTms9918Color tmsFgColor(VrEmuTms9918* tms9918, uint8_t colorByte)
 {
   const vrEmuTms9918Color c = (vrEmuTms9918Color)(colorByte >> 4);
-  return c == TMS_TRANSPARENT ? tms9918->mainBgColor : c;
+  return c == TMS_TRANSPARENT ? tmsMainBgColor(tms9918) : c;
 }
 
 /* Function:  tmsBgColor
@@ -152,49 +164,7 @@ static inline vrEmuTms9918Color tmsFgColor(VrEmuTms9918* tms9918, uint8_t colorB
 static inline vrEmuTms9918Color tmsBgColor(VrEmuTms9918* tms9918, uint8_t colorByte)
 {
   const vrEmuTms9918Color c = (vrEmuTms9918Color)(colorByte & 0x0f);
-  return c == TMS_TRANSPARENT ? tms9918->mainBgColor : c;
-}
-
-
-/* Function:  tmsUpdateMode
- * ----------------------------------------
- * update the current display mode and cached values
- */
-static void __time_critical_func(tmsUpdateMode)(VrEmuTms9918* tms9918)
-{
-  if (tms9918->registers[TMS_REG_0] & TMS_R0_MODE_GRAPHICS_II)
-  {
-    tms9918->mode = TMS_MODE_GRAPHICS_II;
-  }
-  else if (tms9918->registers[TMS_REG_0] & TMS_R0_MODE_TEXT_80)
-  {
-    tms9918->mode = TMS_MODE_TEXT80;
-  }
-  else
-  {
-    /* MC and TEX bits 3 and 4. Shift to bits 0 and 1 to determine a value (0, 1 or 2) */
-    switch ((tms9918->registers[TMS_REG_1] & (TMS_R1_MODE_MULTICOLOR | TMS_R1_MODE_TEXT)) >> 3)
-    {
-      case 1:
-        tms9918->mode = TMS_MODE_MULTICOLOR;
-        break;
-
-      case 2:
-        tms9918->mode = TMS_MODE_TEXT;
-        break;
-
-      default:
-        tms9918->mode = TMS_MODE_GRAPHICS_I;
-        break;
-    }
-  }
-
-  tms9918->displayEnabled = tms9918->registers[TMS_REG_1] & TMS_R1_DISP_ACTIVE;
-  tms9918->interruptsEnabled = tms9918->registers[TMS_REG_1] & TMS_R1_INT_ENABLE;
-  tms9918->spriteSize = tmsSpriteSize(tms9918);
-  tms9918->spriteMag = tmsSpriteMag(tms9918);
-  tms9918->patternTableAddr = tmsPatternTableAddr(tms9918);
-  tms9918->colorTableAddr = tmsColorTableAddr(tms9918);
+  return c == TMS_TRANSPARENT ? tmsMainBgColor(tms9918) : c;
 }
 
 
@@ -221,25 +191,21 @@ inline void tmsMemset(uint8_t* ptr, uint8_t val8, int count)
  * ----------------------------------------
  * reset the new TMS9918
  */
-VR_EMU_TMS9918_DLLEXPORT void vrEmuTms9918Reset(VR_EMU_INST_ONLY_ARG)
+VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918Reset)(VR_EMU_INST_ONLY_ARG)
 {
   tms9918->regWriteStage0Value = 0;
   tms9918->currentAddress = 0;
   tms9918->regWriteStage = 0;
-  tms9918->status = 0;
+  tmsMemset(tms9918->status, 0, sizeof(tms9918->status));
+  tms9918->status [1] = 0xE0;  // ID = F18A
+  tms9918->status [14] = 0x1A; // Version - one more than the F18A's 1.9
   tms9918->readAheadBuffer = 0;
+  tms9918->lockedMask = 0x07;
+  tms9918->restart = 0;
   tmsMemset(tms9918->registers, 0, sizeof(tms9918->registers));
+  tms9918->registers [0x33] = 32; // Sprites to process
 
   /* ram intentionally left in unknown state */
-
-  tmsUpdateMode(tms9918);
-  tms9918->nameTableAddr = tmsNameTableAddr(tms9918);
-  tms9918->colorTableAddr = tmsColorTableAddr(tms9918);
-  tms9918->patternTableAddr = tmsPatternTableAddr(tms9918);
-  tms9918->spriteAttrTableAddr = tmsSpriteAttrTableAddr(tms9918);
-  tms9918->spritePatternTableAddr = tmsSpritePatternTableAddr(tms9918);
-  tms9918->mainBgColor = tmsMainBgColor(tms9918);
-  tms9918->mainFgColor = tmsMainFgColor(tms9918);
 }
 
 
@@ -249,7 +215,7 @@ VR_EMU_TMS9918_DLLEXPORT void vrEmuTms9918Reset(VR_EMU_INST_ONLY_ARG)
  *
  * tms9918: tms9918 object to destroy / clean up
  */
-VR_EMU_TMS9918_DLLEXPORT void vrEmuTms9918Destroy(VR_EMU_INST_ONLY_ARG)
+VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918Destroy)(VR_EMU_INST_ONLY_ARG)
 {
 #if !VR_EMU_TMS9918_SINGLE_INSTANCE
   free(tms9918);
@@ -339,7 +305,7 @@ VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918InterruptSet)(VR_
  * set status flag
  */
 VR_EMU_TMS9918_DLLEXPORT
-void vrEmuTms9918SetStatus(VR_EMU_INST_ARG uint8_t status)
+void __time_critical_func(vrEmuTms9918SetStatus)(VR_EMU_INST_ARG uint8_t status)
 {
   vrEmuTms9918SetStatusImpl(VR_EMU_INST status);
 }
@@ -373,7 +339,7 @@ static inline uint32_t tmsTestCollisionMask(uint8_t xPos, uint32_t spritePixels,
  * use a lookup table. generate the doubledBits lookup table when we need it
  * using doubledBitsNibble.
  */
-static __aligned(4) const uint8_t doubledBitsNibble[16] = {
+__aligned(4) uint8_t doubledBitsNibble[16] = {
   0x00, 0x03, 0x0c, 0x0f,
   0x30, 0x33, 0x3c, 0x3f,
   0xc0, 0xc3, 0xcc, 0xcf,
@@ -390,19 +356,19 @@ static bool doubledInit = false;
  */
 static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
-  const bool spriteMag = tms9918->spriteMag;
-  const uint8_t spriteSize = tms9918->spriteSize;
+  const bool spriteMag = tmsSpriteMag(tms9918);
+  const uint8_t spriteSize = tmsSpriteSize(tms9918);
   const bool sprite16 = spriteSize == 16;
   const uint8_t spriteIdxMask = sprite16 ? 0xfc : 0xff;
   const uint8_t spriteSizePx = spriteSize * (spriteMag + 1);
-  const uint16_t spriteAttrTableAddr = tms9918->spriteAttrTableAddr;
-  const uint16_t spritePatternAddr = tms9918->spritePatternTableAddr;
+  const uint16_t spriteAttrTableAddr = tmsSpriteAttrTableAddr(tms9918);
+  const uint16_t spritePatternAddr = tmsSpritePatternTableAddr(tms9918);
 
   uint8_t spritesShown = 0;
   uint8_t tempStatus = 0x1f;
 
   uint8_t* spriteAttr = tms9918->vram + spriteAttrTableAddr;
-  for (uint8_t spriteIdx = 0; spriteIdx < MAX_SPRITES; ++spriteIdx)
+  for (uint8_t spriteIdx = 0; spriteIdx < (MAX_SPRITES < tms9918->registers [0x33] ? MAX_SPRITES : tms9918->registers [0x33]); ++spriteIdx)
   {
     int16_t yPos = spriteAttr[SPRITE_ATTR_Y];
 
@@ -487,7 +453,7 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
       else
         pattMask = (pattMask << 8) | pattByte;
     }
-    
+
     if (pattMask == 0)
     {
       spriteAttr += SPRITE_ATTR_BYTES;
@@ -540,6 +506,60 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
   return tempStatus;
 }
 
+static uint8_t __time_critical_func(vrEmuTms9918OutputSprites2)(VR_EMU_INST_ARG uint8_t y)
+{
+  const bool spriteMag = tmsSpriteMag(tms9918);
+  const uint8_t spriteSize = tmsSpriteSize(tms9918);
+  const uint16_t spriteAttrTableAddr = tmsSpriteAttrTableAddr(tms9918);
+
+  uint8_t spritesShown = 0;
+  uint8_t tempStatus = 0;
+
+  uint8_t* spriteAttr = tms9918->vram + spriteAttrTableAddr;
+  for (uint8_t spriteIdx = 0; spriteIdx < (MAX_SPRITES < tms9918->registers [0x33] ? MAX_SPRITES : tms9918->registers [0x33]); ++spriteIdx)
+  {
+    int16_t yPos = spriteAttr[SPRITE_ATTR_Y];
+
+    /* stop processing when yPos == LAST_SPRITE_YPOS */
+    if (yPos == LAST_SPRITE_YPOS)
+    {
+      break;
+    }
+
+    /* check if sprite position is in the -31 to 0 range and move back to top */
+    if (yPos > 0xe0)
+    {
+      yPos -= 256;
+    }
+
+    /* first row is YPOS -1 (0xff). 2nd row is YPOS 0 */
+    yPos += 1;
+
+    int16_t pattRow = y - yPos;
+    if (spriteMag)
+    {
+      pattRow >>= 1;  // this needs to be a shift because -1 / 2 becomes 0. Bad.
+    }
+
+    /* check if sprite is visible on this line */
+    if (pattRow < 0 || pattRow >= spriteSize)
+    {
+      spriteAttr += SPRITE_ATTR_BYTES;
+      continue;
+    }
+
+    /* have we exceeded the scanline sprite limit? */
+    if (++spritesShown > MAX_SCANLINE_SPRITES)
+    {
+      tempStatus = STATUS_5S | spriteIdx;
+      break;
+    }
+    spriteAttr += SPRITE_ATTR_BYTES;
+  }
+
+  return tempStatus;
+}
+
 /* Function:  vrEmuTms9918TextScanLine
  * ----------------------------------------
  * generate a Text mode scanline
@@ -550,12 +570,12 @@ static void __time_critical_func(vrEmuTms9918TextScanLine)(VR_EMU_INST_ARG uint8
   const uint8_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
 
   /* address in name table at the start of this row */
-  uint8_t* rowNamesTable = tms9918->vram + tms9918->nameTableAddr + tileY * TEXT_NUM_COLS;
-  const uint8_t* patternTable = tms9918->vram + tms9918->patternTableAddr + pattRow;
+  uint8_t* rowNamesTable = tms9918->vram + tmsNameTableAddr(tms9918) + tileY * TEXT_NUM_COLS;
+  const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918) + pattRow;
 
   const vrEmuTms9918Color bgFgColor[2] = {
-    tms9918->mainBgColor,
-    tms9918->mainFgColor
+    tmsMainBgColor(tms9918),
+    tmsMainFgColor(tms9918)
   };
 
   uint8_t* pixPtr = pixels;
@@ -592,7 +612,7 @@ static void __time_critical_func(vrEmuTms9918Text80ScanLine)(VR_EMU_INST_ARG uin
   // Register 0x0A for text80 name table
 
   uint8_t* rowNamesTable = tms9918->vram /*+ tmsNameTableAddr(tms9918)*/ + tileY * TEXT80_NUM_COLS;
-  const uint8_t* patternTable = tms9918->vram + tms9918->patternTableAddr + pattRow;
+  const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918) + pattRow;
 
   const vrEmuTms9918Color bgColor = TMS_DK_BLUE;//tmsMainBgColor(tms9918);
   const vrEmuTms9918Color fgColor = TMS_WHITE;//tmsMainFgColor(tms9918);
@@ -634,10 +654,10 @@ static void __time_critical_func(vrEmuTms9918GraphicsIScanLine)(VR_EMU_INST_ARG 
   const uint8_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
 
   /* address in name table at the start of this row */
-  const uint16_t rowNamesAddr = tms9918->nameTableAddr + tileY * GRAPHICS_NUM_COLS;
+  const uint16_t rowNamesAddr = tmsNameTableAddr(tms9918) + tileY * GRAPHICS_NUM_COLS;
 
-  const uint8_t* patternTable = tms9918->vram + tms9918->patternTableAddr + pattRow;
-  const uint8_t* colorTable = tms9918->vram + tms9918->colorTableAddr;
+  const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918) + pattRow;
+  const uint8_t* colorTable = tms9918->vram + tmsColorTableAddr(tms9918);
 
   /* iterate over each tile in this row */
   for (uint8_t tileX = 0; tileX < GRAPHICS_NUM_COLS; ++tileX)
@@ -670,7 +690,7 @@ static  __attribute__((noinline))  void __time_critical_func(vrEmuTms9918Graphic
   const uint8_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
 
   /* address in name table at the start of this row */
-  const uint16_t rowNamesAddr = tms9918->nameTableAddr + tileY * GRAPHICS_NUM_COLS;
+  const uint16_t rowNamesAddr = tmsNameTableAddr(tms9918) + tileY * GRAPHICS_NUM_COLS;
 
   /* the datasheet says the lower bits of the color and pattern tables must
      be all 1's for graphics II mode. however, the lowest 2 bits of the
@@ -683,8 +703,8 @@ static  __attribute__((noinline))  void __time_critical_func(vrEmuTms9918Graphic
     & (tms9918->registers[TMS_REG_PATTERN_TABLE] & 0x03); /* which page? 0-2 */
   const uint16_t pageOffset = pageThird << 11; /* offset (0, 0x800 or 0x1000) */
 
-  const uint8_t* patternTable = tms9918->vram + tms9918->patternTableAddr + pageOffset + pattRow;
-  const uint8_t* colorTable = tms9918->vram + tms9918->colorTableAddr + (pageOffset
+  const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918) + pageOffset + pattRow;
+  const uint8_t* colorTable = tms9918->vram + tmsColorTableAddr(tms9918) + (pageOffset
     & ((tms9918->registers[TMS_REG_COLOR_TABLE] & 0x60) << 6)) + pattRow;
 
 
@@ -720,8 +740,8 @@ static void __time_critical_func(vrEmuTms9918MulticolorScanLine)(VR_EMU_INST_ARG
   const uint8_t tileY = y >> 3;
   const uint8_t pattRow = ((y >> 2) & 0x01) + (tileY & 0x03) * 2;
 
-  const uint8_t* nameTable = tms9918->vram + tms9918->nameTableAddr + tileY * GRAPHICS_NUM_COLS;
-  const uint8_t* patternTable = tms9918->vram + tms9918->patternTableAddr + pattRow;
+  const uint8_t* nameTable = tms9918->vram + tmsNameTableAddr(tms9918) + tileY * GRAPHICS_NUM_COLS;
+  const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918) + pattRow;
 
 
   for (uint8_t tileX = 0; tileX < GRAPHICS_NUM_COLS; ++tileX)
@@ -748,23 +768,34 @@ static void __time_critical_func(vrEmuTms9918MulticolorScanLine)(VR_EMU_INST_ARG
 VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ScanLine)(VR_EMU_INST_ARG uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
   uint8_t tempStatus = 0;
+  uint8_t tempStatus2 = 0;
 
-  if (!tms9918->displayEnabled || y >= TMS9918_PIXELS_Y)
+  if (!(tms9918->registers[TMS_REG_1] & TMS_R1_DISP_ACTIVE) || y >= TMS9918_PIXELS_Y)
   {
     tmsMemset(pixels, tmsMainBgColor(tms9918), TMS9918_PIXELS_X);
   }
   else
   {
-    switch (tms9918->mode)
+    switch (tmsMode(tms9918))
     {
       case TMS_MODE_GRAPHICS_I:
         vrEmuTms9918GraphicsIScanLine(VR_EMU_INST y, pixels);
         tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
+        /*if ((tempStatus & STATUS_5S) == 0) {
+            tempStatus2 = vrEmuTms9918OutputSprites2(VR_EMU_INST y + 1);
+            if (tempStatus2 & STATUS_5S)
+                tempStatus = (tempStatus & 0xe0) | tempStatus2;
+        }*/
         break;
 
       case TMS_MODE_GRAPHICS_II:
         vrEmuTms9918GraphicsIIScanLine(VR_EMU_INST y, pixels);
         tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
+        /*if ((tempStatus & STATUS_5S) == 0) {
+            tempStatus2 = vrEmuTms9918OutputSprites2(VR_EMU_INST y + 1);
+            if (tempStatus2 & STATUS_5S)
+                tempStatus = (tempStatus & 0xe0) | tempStatus2;
+        }*/
         break;
 
       case TMS_MODE_TEXT:
@@ -774,6 +805,11 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ScanLine)(VR_E
       case TMS_MODE_MULTICOLOR:
         vrEmuTms9918MulticolorScanLine(VR_EMU_INST y, pixels);
         tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
+        /*if ((tempStatus & STATUS_5S) == 0) {
+            tempStatus2 = vrEmuTms9918OutputSprites2(VR_EMU_INST y + 1);
+            if (tempStatus2 & STATUS_5S)
+                tempStatus = (tempStatus & 0xe0) | tempStatus2;
+        }*/
         break;
 
       case TMS_R0_MODE_TEXT_80:
@@ -791,7 +827,7 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ScanLine)(VR_E
 VR_EMU_TMS9918_DLLEXPORT
 uint8_t __time_critical_func(vrEmuTms9918RegValue)(VR_EMU_INST_ARG vrEmuTms9918Register reg)
 {
-  return tms9918->registers[reg & 0x07];
+  return tms9918->registers[reg & tms9918->lockedMask]; // was 0x07
 }
 
 /* Function:  vrEmuTms9918WriteRegValue
@@ -799,41 +835,17 @@ uint8_t __time_critical_func(vrEmuTms9918RegValue)(VR_EMU_INST_ARG vrEmuTms9918R
  * write a reigister value
  */
 VR_EMU_TMS9918_DLLEXPORT
-void vrEmuTms9918WriteRegValue(VR_EMU_INST_ARG vrEmuTms9918Register reg, uint8_t value)
+void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms9918Register reg, uint8_t value)
 {
-  int regIndex = reg & 0x07;
-  tms9918->registers[regIndex] = value;
-  switch (regIndex)
-  {
-    case TMS_REG_0:
-    case TMS_REG_1:
-      tmsUpdateMode(tms9918);
-      break;
-
-    case TMS_REG_NAME_TABLE:
-      tms9918->nameTableAddr = tmsNameTableAddr(tms9918);
-      break;
-
-    case TMS_REG_COLOR_TABLE:
-      tms9918->colorTableAddr = tmsColorTableAddr(tms9918);
-      break;
-
-    case TMS_REG_PATTERN_TABLE:
-      tms9918->patternTableAddr = tmsPatternTableAddr(tms9918);
-      break;
-
-    case TMS_REG_SPRITE_ATTR_TABLE:
-      tms9918->spriteAttrTableAddr = tmsSpriteAttrTableAddr(tms9918);
-      break;
-
-    case TMS_REG_SPRITE_PATT_TABLE:
-      tms9918->spritePatternTableAddr = tmsSpritePatternTableAddr(tms9918);
-      break;
-
-    case TMS_REG_FG_BG_COLOR:
-      tms9918->mainBgColor = tmsMainBgColor(tms9918);
-      tms9918->mainFgColor = tmsMainFgColor(tms9918);
-      break;
+  if ((reg == (0x80 | 0x39)) && (value == 0x1C)) {
+    tms9918->registers[0x39] = 0x1C; // Allow this one through even when locked
+  } else {
+    int regIndex = reg & tms9918->lockedMask; // was 0x07
+    tms9918->registers[regIndex] = value;
+    if (regIndex == 0x37) {
+      tms9918->registers [0x38] = 0;
+      tms9918->restart = 1;
+    }
   }
 }
 
@@ -844,7 +856,7 @@ void vrEmuTms9918WriteRegValue(VR_EMU_INST_ARG vrEmuTms9918Register reg, uint8_t
  * return a value from vram
  */
 VR_EMU_TMS9918_DLLEXPORT
-uint8_t vrEmuTms9918VramValue(VR_EMU_INST_ARG uint16_t addr)
+uint8_t __time_critical_func(vrEmuTms9918VramValue)(VR_EMU_INST_ARG uint16_t addr)
 {
   return tms9918->vram[addr & VRAM_MASK];
 }
@@ -854,9 +866,9 @@ uint8_t vrEmuTms9918VramValue(VR_EMU_INST_ARG uint16_t addr)
   * check BLANK flag
   */
 VR_EMU_TMS9918_DLLEXPORT
-bool vrEmuTms9918DisplayEnabled(VR_EMU_INST_ONLY_ARG)
+bool __time_critical_func(vrEmuTms9918DisplayEnabled)(VR_EMU_INST_ONLY_ARG)
 {
-  return tms9918->displayEnabled;
+  return (tms9918->registers[TMS_REG_1] & TMS_R1_DISP_ACTIVE);
 }
 
 /* Function:  vrEmuTms9918DisplayMode
@@ -864,7 +876,7 @@ bool vrEmuTms9918DisplayEnabled(VR_EMU_INST_ONLY_ARG)
   * current display mode
   */
 VR_EMU_TMS9918_DLLEXPORT
-vrEmuTms9918Mode vrEmuTms9918DisplayMode(VR_EMU_INST_ONLY_ARG)
+vrEmuTms9918Mode __time_critical_func(vrEmuTms9918DisplayMode)(VR_EMU_INST_ONLY_ARG)
 {
-  return tms9918->mode;
+  return tmsMode(tms9918);
 }
