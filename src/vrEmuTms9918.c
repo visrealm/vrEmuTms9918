@@ -845,7 +845,9 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
     if (regIndex == 0x37) {
       tms9918->registers [0x38] = 0;
       tms9918->restart = 1;
-    }
+    } else
+    if (regIndex == 0x0F)
+      tms9918->status [0x0F] = value;
   }
 }
 
