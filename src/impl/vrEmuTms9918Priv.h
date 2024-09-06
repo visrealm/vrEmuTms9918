@@ -87,7 +87,7 @@ struct vrEmuTMS9918_s
   uint8_t readAheadBuffer;
 
   uint8_t lockedMask; // 0x07 when locked, 0x3F when unlocked
-  uint8_t unlockCount; // 0x07 when locked, 0x3F when unlocked
+  uint8_t unlockCount; // number of unlock steps taken
   volatile uint8_t restart;
 
   /* palette writes are done in two stages too */
@@ -176,7 +176,7 @@ inline uint8_t vrEmuTms9918PeekStatusImpl(VR_EMU_INST_ONLY_ARG)
  */
 inline void vrEmuTms9918WriteDataImpl(VR_EMU_INST_ARG uint8_t data)
 {
-  if (tms9918->registers[0x2f] < 0) // data port is in palette mode
+  if (tms9918->registers[0x2f] & 0x80) // data port is in palette mode
   {
     if (tms9918->palWriteStage == 0)
     {
