@@ -31,6 +31,8 @@ void __time_critical_func(vrEmuTms9918Init)()
 
 #else
 
+#include <stdlib.h>
+
  /* Function:  vrEmuTms9918New
   * ----------------------------------------
   * create a new TMS9918
@@ -187,6 +189,76 @@ inline void tmsMemset(uint8_t* ptr, uint8_t val8, int count)
   }
 }
 
+const uint16_t defaultPalette[] = {
+0x000, // -- 0 Transparent
+0x000, // -- 1 Black
+0x2C3, // -- 2 Medium Green
+0x5D6, // -- 3 Light Green
+0x54F, // -- 4 Dark Blue
+0x76F, // -- 5 Light Blue
+0xD54, // -- 6 Dark Red
+0x4EF, // -- 7 Cyan
+0xF54, // -- 8 Medium Red
+0xF76, // -- 9 Light Red
+0xDC3, // -- 10 Dark Yellow
+0xED6, // -- 11 Light Yellow
+0x2B2, // -- 12 Dark Green
+0xC5C, // -- 13 Magenta
+0xCCC, // -- 14 Gray
+0xFFF, // -- 15 White
+//-- Palette 1, ECM1 (0 index is always 000) version of palette 0
+0x000, // -- 0 Black
+0x2C3, // -- 1 Medium Green
+0x000, // -- 2 Black
+0x54F, // -- 3 Dark Blue
+0x000, // -- 4 Black
+0xD54, // -- 5 Dark Red
+0x000, // -- 6 Black
+0x4EF, // -- 7 Cyan
+0x000, // -- 8 Black
+0xCCC, // -- 9 Gray
+0x000, // -- 10 Black
+0xDC3, // -- 11 Dark Yellow
+0x000, // -- 12 Black
+0xC5C, // -- 13 Magenta
+0x000, // -- 14 Black
+0xFFF, // -- 15 White
+//-- Palette 2, CGA colors
+0x000, // -- 0 >000000 ( 0 0 0) black
+0x00A, // -- 1 >0000AA ( 0 0 170) blue
+0x0A0, // -- 2 >00AA00 ( 0 170 0) green
+0x0AA, // -- 3 >00AAAA ( 0 170 170) cyan
+0xA00, // -- 4 >AA0000 (170 0 0) red
+0xA0A, // -- 5 >AA00AA (170 0 170) magenta
+0xA50, // -- 6 >AA5500 (170 85 0) brown
+0xAAA, // -- 7 >AAAAAA (170 170 170) light gray
+0x555, // -- 8 >555555 ( 85 85 85) gray
+0x55F, // -- 9 >5555FF ( 85 85 255) light blue
+0x5F5, // -- 10 >55FF55 ( 85 255 85) light green
+0x5FF, // -- 11 >55FFFF ( 85 255 255) light cyan
+0xF55, // -- 12 >FF5555 (255 85 85) light red
+0xF5F, // -- 13 >FF55FF (255 85 255) light magenta
+0xFF5, // -- 14 >FFFF55 (255 255 85) yellow
+0xFFF, // -- 15 >FFFFFF (255 255 255) white
+//-- Palette 3, ECM1 (0 index is always 000) version of palette 2
+0x000, // -- 0 >000000 ( 0 0 0) black
+0x555, // -- 1 >555555 ( 85 85 85) gray
+0x000, // -- 2 >000000 ( 0 0 0) black
+0x00A, // -- 3 >0000AA ( 0 0 170) blue
+0x000, // -- 4 >000000 ( 0 0 0) black
+0x0A0, // -- 5 >00AA00 ( 0 170 0) green
+0x000, // -- 6 >000000 ( 0 0 0) black
+0x0AA, // -- 7 >00AAAA ( 0 170 170) cyan
+0x000, // -- 8 >000000 ( 0 0 0) black
+0xA00, // -- 9 >AA0000 (170 0 0) red
+0x000, // -- 10 >000000 ( 0 0 0) black
+0xA0A, // -- 11 >AA00AA (170 0 170) magenta
+0x000, // -- 12 >000000 ( 0 0 0) black
+0xA50, // -- 13 >AA5500 (170 85 0) brown
+0x000, // -- 14 >000000 ( 0 0 0) black
+0xFFF  // -- 15 >FFFFFF (255 255 255) white
+};
+
 /* Function:  vrEmuTms9918Reset
  * ----------------------------------------
  * reset the new TMS9918
@@ -201,9 +273,17 @@ VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918Reset)(VR_EMU_INS
   tms9918->status [14] = 0x1A; // Version - one more than the F18A's 1.9
   tms9918->readAheadBuffer = 0;
   tms9918->lockedMask = 0x07;
+  tms9918->unlockCount = 0;
   tms9918->restart = 0;
   tmsMemset(tms9918->registers, 0, sizeof(tms9918->registers));
+  tms9918->registers [0x30] = 1; // vram address increment register
   tms9918->registers [0x33] = 32; // Sprites to process
+
+  // set up default palettes
+  for (int i = 0; i < sizeof(defaultPalette) / sizeof(uint16_t); ++i)
+  {
+    tms9918->pram[i] = defaultPalette[i];
+  }
 
   /* ram intentionally left in unknown state */
 }
@@ -314,7 +394,7 @@ void __time_critical_func(vrEmuTms9918SetStatus)(VR_EMU_INST_ARG uint8_t status)
  * ----------------------------------------
  * Test and update the sprite collision mask.
  */
-static inline uint32_t tmsTestCollisionMask(uint8_t xPos, uint32_t spritePixels, uint8_t spriteWidth)
+static inline uint32_t tmsTestCollisionMask(VR_EMU_INST_ARG uint8_t xPos, uint32_t spritePixels, uint8_t spriteWidth)
 {
   int rowSpriteBitsWord = xPos >> 5;
   int rowSpriteBitsWordBit = xPos & 0x1f;
@@ -478,7 +558,7 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
     }
 
     /* test and update the collision mask */
-    uint32_t validPixels = tmsTestCollisionMask(xPos, pattMask, thisSpriteSize);
+    uint32_t validPixels = tmsTestCollisionMask(VR_EMU_INST xPos, pattMask, thisSpriteSize);
 
     /* if the result is different, we collided */
     if (validPixels != pattMask)
@@ -839,6 +919,11 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
 {
   if ((reg == (0x80 | 0x39)) && (value == 0x1C)) {
     tms9918->registers[0x39] = 0x1C; // Allow this one through even when locked
+    if (++tms9918->unlockCount == 2)
+    {
+      tms9918->unlockCount = 0;
+      tms9918->lockedMask = 0x3f;
+    }
   } else {
     int regIndex = reg & tms9918->lockedMask; // was 0x07
     tms9918->registers[regIndex] = value;
