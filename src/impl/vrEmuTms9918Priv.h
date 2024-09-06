@@ -90,6 +90,10 @@ struct vrEmuTMS9918_s
   uint8_t unlockCount; // 0x07 when locked, 0x3F when unlocked
   volatile uint8_t restart;
 
+  /* palette writes are done in two stages too */
+  uint8_t palWriteStage;
+  uint8_t palWriteStage0Value;
+
   uint32_t rowSpriteBits[TMS9918_PIXELS_X / 32]; /* collision mask */
 };
 
@@ -143,6 +147,10 @@ inline void vrEmuTms9918WriteAddrImpl(VR_EMU_INST_ARG uint8_t data)
 inline uint8_t vrEmuTms9918ReadStatusImpl(VR_EMU_INST_ONLY_ARG)
 {
   tms9918->regWriteStage = 0;
+  
+  tms9918->palWriteStage = 0;
+  tms9918->registers[0x2f] &= 0x7f; // reset data port palette mode
+
   if ((tms9918->registers [0x0F] & 0x0F) == 0) {
     const uint8_t tmpStatus = tms9918->status [0];
     tms9918->status [0] = 0x1f;
@@ -168,10 +176,34 @@ inline uint8_t vrEmuTms9918PeekStatusImpl(VR_EMU_INST_ONLY_ARG)
  */
 inline void vrEmuTms9918WriteDataImpl(VR_EMU_INST_ARG uint8_t data)
 {
-  tms9918->regWriteStage = 0;
-  tms9918->readAheadBuffer = data;
-  tms9918->vram[(tms9918->currentAddress) & VRAM_MASK] = data;
-  tms9918->currentAddress += (int8_t)tms9918->registers[0x30]; // increment register
+  if (tms9918->registers[0x2f] < 0) // data port is in palette mode
+  {
+    if (tms9918->palWriteStage == 0)
+    {
+      tms9918->palWriteStage0Value = data & 0x0f;
+      ++tms9918->palWriteStage;      
+    }
+    else
+    {
+      tms9918->palWriteStage = 0;
+      tms9918->pram[tms9918->registers[0x2f] & 0x3f] = tms9918->palWriteStage0Value << 8 | data; // reset data port palette mode
+      if (tms9918->registers[0x2f] & 0x40)
+      {
+        ++tms9918->registers[0x2f];
+      }
+      else
+      {
+        tms9918->registers[0x2f] &= 0x7f;
+      }
+    }
+  }
+  else
+  {
+    tms9918->regWriteStage = 0;
+    tms9918->readAheadBuffer = data;
+    tms9918->vram[(tms9918->currentAddress) & VRAM_MASK] = data;
+    tms9918->currentAddress += (int8_t)tms9918->registers[0x30]; // increment register
+  }
 }
 
 
