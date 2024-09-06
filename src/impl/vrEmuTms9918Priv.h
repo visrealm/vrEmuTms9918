@@ -186,7 +186,7 @@ inline void vrEmuTms9918WriteDataImpl(VR_EMU_INST_ARG uint8_t data)
     else
     {
       tms9918->palWriteStage = 0;
-      tms9918->pram[tms9918->registers[0x2f] & 0x3f] = tms9918->palWriteStage0Value << 8 | data; // reset data port palette mode
+      tms9918->pram[tms9918->registers[0x2f] & 0x3f] = (tms9918->palWriteStage0Value << 8) | data; // reset data port palette mode
       if (tms9918->registers[0x2f] & 0x40)
       {
         ++tms9918->registers[0x2f];
