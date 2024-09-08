@@ -772,10 +772,8 @@ static void ecmLookupInit()
 
 static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
-
-  uint16_t pageOffset = 0;
-
   uint8_t *end = pixels + TMS9918_PIXELS_X;
+  bool swapYPage = false;
 
   if (tms9918->registers[0x1c])
   {
@@ -790,7 +788,7 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
 
       if (tms9918->registers[0x1d] & 0x01) // multiple vertical pages?
       {
-        pageOffset = (tms9918->registers[0x1d] & 0x02) ? 2048 : 1024;
+        swapYPage = true;
       }
     }
    
@@ -813,7 +811,8 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
   const uint8_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
 
   /* address in name table at the start of this row */
-  uint16_t rowNamesAddr = tmsNameTableAddr(tms9918) + pageOffset + tileY * GRAPHICS_NUM_COLS;
+  uint16_t rowNamesAddr = tmsNameTableAddr(tms9918) + tileY * GRAPHICS_NUM_COLS;
+  if (swapYPage) rowNamesAddr ^= 0x800;
 
   const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918);
   const uint8_t* colorTable = tms9918->vram + tmsColorTableAddr(tms9918);
@@ -826,7 +825,7 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
   {
     if (tileIndex == GRAPHICS_NUM_COLS)
     {
-      if (tms9918->registers[0x1d] & 0x02) rowNamesAddr += 1024;
+      if (tms9918->registers[0x1d] & 0x02) rowNamesAddr ^= 0x400;
       tileIndex = 0;
     }
 
@@ -919,10 +918,8 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
 
 static void __time_critical_func(vrEmuF18AT2ScanLine)(VR_EMU_INST_ARG uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
-
-  uint16_t pageOffset = 0;
-
   uint8_t *end = pixels + TMS9918_PIXELS_X;
+  bool swapYPage = false;
 
   if (tms9918->registers[0x1a])
   {
@@ -937,7 +934,7 @@ static void __time_critical_func(vrEmuF18AT2ScanLine)(VR_EMU_INST_ARG uint8_t y,
 
       if (tms9918->registers[0x1d] & 0x10) // multiple vertical pages?
       {
-        pageOffset = (tms9918->registers[0x1d] & 0x20) ? 2048 : 1024;
+        swapYPage = true;
       }
     }
    
@@ -960,7 +957,8 @@ static void __time_critical_func(vrEmuF18AT2ScanLine)(VR_EMU_INST_ARG uint8_t y,
   const uint8_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
 
   /* address in name table at the start of this row */
-  uint16_t rowNamesAddr = tmsNameTable2Addr(tms9918) + pageOffset + tileY * GRAPHICS_NUM_COLS;
+  uint16_t rowNamesAddr = tmsNameTable2Addr(tms9918) + tileY * GRAPHICS_NUM_COLS;
+  if (swapYPage) rowNamesAddr ^= 0x800;
 
   const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918);
   const uint8_t* colorTable = tms9918->vram + tmsColorTable2Addr(tms9918);
@@ -973,7 +971,7 @@ static void __time_critical_func(vrEmuF18AT2ScanLine)(VR_EMU_INST_ARG uint8_t y,
   {
     if (tileIndex == GRAPHICS_NUM_COLS)
     {
-      if (tms9918->registers[0x1d] & 0x20) rowNamesAddr += 1024;
+      if (tms9918->registers[0x1d] & 0x20) rowNamesAddr ^= 0x400;
       tileIndex = 0;
     }
 
