@@ -657,7 +657,7 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
       pattMask = spriteBits[0];
     }
 
-    /* do something about magnified sprites */
+    /* TODO: do something about magnified sprites */
     pattMask <<= 16;
 
     /* test and update the collision mask */
@@ -677,9 +677,12 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
       {
         while (validPixels)
         {
+          /* output the sprite pixels 4 at a time */
           if (validPixels & 0xf0000000)
           {
-            uint16_t color = ecmLookup[((spriteBits[0] & 0xf000) >> 12) | ((spriteBits[1] & 0xf000) >> 8) | ((spriteBits[2] & 0xf000) >> 4)];
+            uint16_t color = ecmLookup[((spriteBits[0] & 0xf000) >> 12) |
+                                       ((spriteBits[1] & 0xf000) >> 8) |
+                                       ((spriteBits[2] & 0xf000) >> 4)];
 
             for (int i = 0; i < 4; ++i)
             {
@@ -687,7 +690,6 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
               if (pix) pixels[xPos + i] = spriteColor | pix;
               color >>= 4;
             }
-
           }
           validPixels <<= 4;
           spriteBits[0] <<= 4;
@@ -710,60 +712,6 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
       }
     }
 
-    spriteAttr += SPRITE_ATTR_BYTES;
-  }
-
-  return tempStatus;
-}
-
-static uint8_t __time_critical_func(vrEmuTms9918OutputSprites2)(VR_EMU_INST_ARG uint8_t y)
-{
-  const bool spriteMag = tmsSpriteMag(tms9918);
-  const uint8_t spriteSize = tmsSpriteSize(tms9918);
-  const uint16_t spriteAttrTableAddr = tmsSpriteAttrTableAddr(tms9918);
-
-  uint8_t spritesShown = 0;
-  uint8_t tempStatus = 0;
-
-  uint8_t* spriteAttr = tms9918->vram + spriteAttrTableAddr;
-  for (uint8_t spriteIdx = 0; spriteIdx < (MAX_SPRITES < tms9918->registers [0x33] ? MAX_SPRITES : tms9918->registers [0x33]); ++spriteIdx)
-  {
-    int16_t yPos = spriteAttr[SPRITE_ATTR_Y];
-
-    /* stop processing when yPos == LAST_SPRITE_YPOS */
-    if (yPos == LAST_SPRITE_YPOS)
-    {
-      break;
-    }
-
-    /* check if sprite position is in the -31 to 0 range and move back to top */
-    if (yPos > 0xe0)
-    {
-      yPos -= 256;
-    }
-
-    /* first row is YPOS -1 (0xff). 2nd row is YPOS 0 */
-    yPos += 1;
-
-    int16_t pattRow = y - yPos;
-    if (spriteMag)
-    {
-      pattRow >>= 1;  // this needs to be a shift because -1 / 2 becomes 0. Bad.
-    }
-
-    /* check if sprite is visible on this line */
-    if (pattRow < 0 || pattRow >= spriteSize)
-    {
-      spriteAttr += SPRITE_ATTR_BYTES;
-      continue;
-    }
-
-    /* have we exceeded the scanline sprite limit? */
-    if (++spritesShown > MAX_SCANLINE_SPRITES)
-    {
-      tempStatus = STATUS_5S | spriteIdx;
-      break;
-    }
     spriteAttr += SPRITE_ATTR_BYTES;
   }
 
@@ -963,8 +911,8 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
         {
           pattOffset += ecmOffset;
           value = patternTable[pattOffset] << startPattBit;
-          pattBytesLow |= (value & 0xf) << ((i) * 4); value>>=4;
-          pattBytesHigh |= (value & 0xf) << ((i) * 4);
+          pattBytesLow |= (value & 0xf) << (i * 4); value >>= 4;
+          pattBytesHigh |= (value & 0xf) << (i * 4);
         }
 
         uint32_t pattern = ((uint32_t)ecmLookup[pattBytesLow] << 16) | ecmLookup[pattBytesHigh];
@@ -974,10 +922,8 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
 
         while (count--)
         {
-          uint8_t pixColor = (pattern & 0x07);
-          *pixels = ecmColor | pixColor;
+          *(pixels++) = ecmColor | (pattern & 0x07);
           pattern >>= 4;
-          ++pixels;
         }
       }
     }
@@ -1116,17 +1062,23 @@ static void __time_critical_func(vrEmuF18AT2ScanLine)(VR_EMU_INST_ARG uint8_t y,
           pattBytesHigh |= (value & 0xf) << ((i) * 4);
         }
 
-        uint32_t pattern = ((uint32_t)ecmLookup[pattBytesLow] << 16) | ecmLookup[pattBytesHigh];
-
         int count = 8 - startPattBit;
         if (count > (end - pixels)) count = end - pixels;
 
-        while (count--)
+        uint32_t pattern = ((uint32_t)ecmLookup[pattBytesLow] << 16) | ecmLookup[pattBytesHigh];
+        if (pattern)
         {
-          uint8_t pixColor = (pattern & 0x07);
-          if (pixColor) *pixels = ecmColor | pixColor;
-          pattern >>= 4;
-          ++pixels;
+          while (count--)
+          {
+            uint8_t pixColor = (pattern & 0x07);
+            if (pixColor) *pixels = ecmColor | pixColor;
+            pattern >>= 4;
+            ++pixels;
+          }
+        }
+        else
+        {
+          pixels += count;
         }
       }
     }
@@ -1268,21 +1220,11 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ScanLine)(VR_E
       case TMS_MODE_GRAPHICS_I:
         vrEmuTms9918GraphicsIScanLine(VR_EMU_INST y, pixels);
         tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
-        /*if ((tempStatus & STATUS_5S) == 0) {
-            tempStatus2 = vrEmuTms9918OutputSprites2(VR_EMU_INST y + 1);
-            if (tempStatus2 & STATUS_5S)
-                tempStatus = (tempStatus & 0xe0) | tempStatus2;
-        }*/
         break;
 
       case TMS_MODE_GRAPHICS_II:
         vrEmuTms9918GraphicsIIScanLine(VR_EMU_INST y, pixels);
         tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
-        /*if ((tempStatus & STATUS_5S) == 0) {
-            tempStatus2 = vrEmuTms9918OutputSprites2(VR_EMU_INST y + 1);
-            if (tempStatus2 & STATUS_5S)
-                tempStatus = (tempStatus & 0xe0) | tempStatus2;
-        }*/
         break;
 
       case TMS_MODE_TEXT:
@@ -1292,11 +1234,6 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ScanLine)(VR_E
       case TMS_MODE_MULTICOLOR:
         vrEmuTms9918MulticolorScanLine(VR_EMU_INST y, pixels);
         tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
-        /*if ((tempStatus & STATUS_5S) == 0) {
-            tempStatus2 = vrEmuTms9918OutputSprites2(VR_EMU_INST y + 1);
-            if (tempStatus2 & STATUS_5S)
-                tempStatus = (tempStatus & 0xe0) | tempStatus2;
-        }*/
         break;
 
       case TMS_R0_MODE_TEXT_80:
