@@ -287,6 +287,7 @@ VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918Reset)(VR_EMU_INS
 {
   tms9918->regWriteStage0Value = 0;
   tms9918->currentAddress = 0;
+  tms9918->gpuAddress = 0xFFFF; // "Odd" don't start value
   tms9918->regWriteStage = 0;
   tmsMemset(tms9918->status, 0, sizeof(tms9918->status));
   tms9918->status [1] = 0xE0;  // ID = F18A
@@ -1246,8 +1247,14 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
     tms9918->unlockCount = 0;
     int regIndex = reg & tms9918->lockedMask; // was 0x07
     tms9918->registers[regIndex] = value;
-    if (regIndex == 0x37) {
-      tms9918->registers [0x38] = 0;
+    if ((regIndex == 0x37) || ((regIndex == 0x38) && ((value & 1) == 0))) {
+      tms9918->gpuAddress = ((tms9918->registers [0x36] << 8) | tms9918->registers [0x37]) & 0xFFFE;
+      if (regIndex == 0x37) {
+        tms9918->registers [0x38] = 0;
+        tms9918->restart = 1;
+      }
+    } else
+    if ((regIndex == 0x38) && (value & 1)) {
       tms9918->restart = 1;
     } else
     if (regIndex == 0x0F)
