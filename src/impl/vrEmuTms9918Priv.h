@@ -77,6 +77,8 @@ struct vrEmuTMS9918_s
   /* current address for cpu access (auto-increments) */
   uint16_t currentAddress;
 
+  uint16_t gpuAddress;
+
   /* address or register write stage (0 or 1) */
   uint8_t regWriteStage;
 
