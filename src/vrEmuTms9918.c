@@ -584,7 +584,7 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
         tempStatus &= 0xe0;
         tempStatus |= STATUS_5S | spriteIdx;
       }
-      break;
+      //break;
     }
 
     /* sprite is visible on this line */
@@ -1227,11 +1227,11 @@ static uint8_t __time_critical_func(vrEmuTms9918GraphicsIScanLine)(VR_EMU_INST_A
 
   if (!tilesDisabled) vrEmuF18AT1ScanLine(y, pixels);
 
-  uint8_t tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
-
   if (tms9918->registers[0x31] & 0x80) vrEmuF18AT2ScanLine(y, pixels);
 
   vrEmuTms9918BitmapLayerScanLine(VR_EMU_INST y, pixels, true);
+
+  uint8_t tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
 
   return tempStatus;
 }
