@@ -1282,6 +1282,20 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
     if ((regIndex == 0x38) && (value & 1)) {
       tms9918->restart = 1;
     } else
+    if ((regIndex == 0x32) && (value & 0x80)) { // reset all registers?
+      tms9918->unlockCount = 0;
+      tms9918->lockedMask = 0x07;
+      tmsMemset(tms9918->registers, 0, sizeof(tms9918->registers));
+      tms9918->registers [0x01] = 0x40;
+      tms9918->registers [0x03] = 0x10;
+      tms9918->registers [0x04] = 0x01;
+      tms9918->registers [0x05] = 0x0A;
+      tms9918->registers [0x06] = 0x02;
+      tms9918->registers [0x07] = 0xF2;
+      tms9918->registers [0x30] = 1; // vram address increment register
+      tms9918->registers [0x33] = 32; // Sprites to process
+      tms9918->registers [0x36] = 0x40;
+    } else
     if (regIndex == 0x0F)
       tms9918->status [0x0F] = value;
   }
