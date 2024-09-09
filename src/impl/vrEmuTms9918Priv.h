@@ -26,7 +26,7 @@
 #define PATTERN_BYTES              8
 #define GFXI_COLOR_GROUP_SIZE      8
 
-#define MAX_SPRITES                8
+#define MAX_SPRITES               32
 
 #define SPRITE_ATTR_Y              0
 #define SPRITE_ATTR_X              1

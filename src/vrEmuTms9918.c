@@ -13,6 +13,8 @@
 
 #include "impl/vrEmuTms9918Priv.h"
 
+#include "pico/divider.h"
+
 #if VR_EMU_TMS9918_SINGLE_INSTANCE
 
 static __aligned(4) VrEmuTms9918 tms9918Inst;
@@ -49,6 +51,7 @@ VR_EMU_TMS9918_DLLEXPORT VrEmuTms9918* vrEmuTms9918New()
 }
 
 #endif
+
 
 
 vrEmuTms9918Mode r1Modes [] = { TMS_MODE_GRAPHICS_I, TMS_MODE_MULTICOLOR, TMS_MODE_TEXT, TMS_MODE_GRAPHICS_I };
@@ -1397,16 +1400,15 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
       if (statReg > 3 && statReg < 12)
       {
         uint32_t elapsed = tms9918->currentTime - tms9918->startTime;
-        uint32_t micro = elapsed % 1000;
-        elapsed /= 1000;
-        uint32_t milli = elapsed % 1000;
-        elapsed /= 1000;
-        tms9918->status[0x06] = micro & 0x0ff; 
-        tms9918->status[0x07] = micro >> 8;
-        tms9918->status[0x08] = milli & 0x0ff;
-        tms9918->status[0x09] = milli >> 8;
-        tms9918->status[0x0a] = elapsed & 0x00ff;
-        tms9918->status[0x0b] = elapsed >> 8;
+        divmod_result_t micro = divmod_u32u32(elapsed, 1000);
+        divmod_result_t milli = divmod_u32u32(to_quotient_u32(micro), 1000);
+
+        tms9918->status[0x06] = to_remainder_u32(micro) & 0x0ff; 
+        tms9918->status[0x07] = to_remainder_u32(micro) >> 8;
+        tms9918->status[0x08] = to_remainder_u32(milli) & 0x0ff;
+        tms9918->status[0x09] = to_remainder_u32(milli) >> 8;
+        tms9918->status[0x0a] = to_quotient_u32(milli) & 0x00ff;
+        tms9918->status[0x0b] = to_quotient_u32(milli) >> 8;
       }
     }
   }
