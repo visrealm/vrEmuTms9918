@@ -924,12 +924,19 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
         int count = 8 - startPattBit;
         if (count > (end - pixels)) count = end - pixels;
 
-        while (count--)
+        if (pattern || !trans)
         {
-          uint8_t pixColor = (pattern & 0x07);
-          if (!trans && pixColor) *pixels = ecmColor | pixColor;
-          pattern >>= 4;
-          ++pixels;
+          while (count--)
+          {
+            uint8_t pixColor = (pattern & 0x07);
+            if (!trans || pixColor) *pixels = ecmColor | pixColor;
+            pattern >>= 4;
+            ++pixels;
+          }
+        }
+        else
+        {
+          pixels += count;
         }
       }
     }
@@ -1140,7 +1147,7 @@ static void __time_critical_func(vrEmuTms9918BitmapLayerScanLine)(VR_EMU_INST_AR
     return;
 
   const uint8_t bottom = top + tms9918->registers[0x24];
-  if (bottom < y)
+  if (bottom <= y)
     return;
 
   bool transp = bmlCtl & 0x20;
@@ -1155,7 +1162,6 @@ static void __time_critical_func(vrEmuTms9918BitmapLayerScanLine)(VR_EMU_INST_AR
   uint8_t pal = (bmlCtl & (fat ? 0xc : 0xf)) << 2;
 
   uint16_t addr = (tms9918->registers[0x20] << 6) + ((y - top) * width);
-  if (fat) width = tms9918->registers[0x23] >> 1;
 
   uint8_t xPos = tms9918->registers[0x21];
 
@@ -1168,10 +1174,11 @@ static void __time_critical_func(vrEmuTms9918BitmapLayerScanLine)(VR_EMU_INST_AR
       if (!transp || color)
       {
         pixels[xPos++] = pal | color;
+        if (fat) pixels[xPos++] = pal | color;
       }
       else
       {
-        ++xPos;
+        xPos += 1 + fat;
       }
       data <<= colorSize;
     }    
@@ -1185,7 +1192,7 @@ static void __time_critical_func(vrEmuTms9918BitmapLayerScanLine)(VR_EMU_INST_AR
  * ----------------------------------------
  * generate a Graphics I mode scanline
  */
-static void __time_critical_func(vrEmuTms9918GraphicsIScanLine)(VR_EMU_INST_ARG uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
+static uint8_t __time_critical_func(vrEmuTms9918GraphicsIScanLine)(VR_EMU_INST_ARG uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
   if (!ecmLookupReady) ecmLookupInit();
 
@@ -1193,9 +1200,13 @@ static void __time_critical_func(vrEmuTms9918GraphicsIScanLine)(VR_EMU_INST_ARG 
 
   vrEmuF18AT1ScanLine(y, pixels);
 
+  uint8_t tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
+
   if (tms9918->registers[0x31] & 0x80) vrEmuF18AT2ScanLine(y, pixels);
 
   vrEmuTms9918BitmapLayerScanLine(VR_EMU_INST y, pixels, false);
+
+  return tempStatus;
 }
 
 /* Function:  vrEmuTms9918GraphicsIIScanLine
@@ -1296,8 +1307,7 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ScanLine)(VR_E
   switch (tmsMode(tms9918))
   {
     case TMS_MODE_GRAPHICS_I:
-      vrEmuTms9918GraphicsIScanLine(VR_EMU_INST y, pixels);
-      tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
+      tempStatus = vrEmuTms9918GraphicsIScanLine(VR_EMU_INST y, pixels);
       break;
 
     case TMS_MODE_GRAPHICS_II:
@@ -1374,8 +1384,31 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
       tms9918->registers [0x33] = 32; // Sprites to process
       tms9918->registers [0x36] = 0x40;
     } else
+    
     if (regIndex == 0x0F)
-      tms9918->status [0x0F] = value;
+    {
+      uint8_t statReg = (value & 0x0f);
+      tms9918->status [0x0F] = statReg;
+      if (value & 0x40) tms9918->startTime = time_us_64();
+      if (value & 0x20) tms9918->currentTime = time_us_64();
+      else if (value & 0x10) tms9918->startTime += (tms9918->stopTime - tms9918->startTime);
+      else tms9918->currentTime = tms9918->stopTime = time_us_64();
+
+      if (statReg > 3 && statReg < 12)
+      {
+        uint32_t elapsed = tms9918->currentTime - tms9918->startTime;
+        uint32_t micro = elapsed % 1000;
+        elapsed /= 1000;
+        uint32_t milli = elapsed % 1000;
+        elapsed /= 1000;
+        tms9918->status[0x06] = micro & 0x0ff; 
+        tms9918->status[0x07] = micro >> 8;
+        tms9918->status[0x08] = milli & 0x0ff;
+        tms9918->status[0x09] = milli >> 8;
+        tms9918->status[0x0a] = elapsed & 0x00ff;
+        tms9918->status[0x0b] = elapsed >> 8;
+      }
+    }
   }
 }
 

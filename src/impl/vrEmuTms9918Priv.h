@@ -96,6 +96,10 @@ struct vrEmuTMS9918_s
   uint8_t palWriteStage;
   uint8_t palWriteStage0Value;
 
+  uint64_t startTime;
+  uint64_t stopTime;
+  uint64_t currentTime;
+
   uint32_t rowSpriteBits[TMS9918_PIXELS_X / 32]; /* collision mask */
 };
 
