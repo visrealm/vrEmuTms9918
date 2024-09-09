@@ -1324,12 +1324,10 @@ static void __time_critical_func(vrEmuTms9918MulticolorScanLine)(VR_EMU_INST_ARG
 VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ScanLine)(VR_EMU_INST_ARG uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
   uint8_t tempStatus = 0;
-  uint8_t tempStatus2 = 0;
 
-  //if (!(tms9918->registers[TMS_REG_1] & TMS_R1_DISP_ACTIVE))// || y >= TMS9918_PIXELS_Y)
-  {
-    tmsMemset(pixels, tmsMainBgColor(tms9918), TMS9918_PIXELS_X);
-  }
+  tmsMemset(pixels, tmsMainBgColor(tms9918), TMS9918_PIXELS_X);
+  if (!(tms9918->registers[TMS_REG_1] & TMS_R1_DISP_ACTIVE))
+    return tempStatus;
 
   switch (tmsMode(tms9918))
   {
