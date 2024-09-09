@@ -1149,44 +1149,66 @@ static void __time_critical_func(vrEmuTms9918BitmapLayerScanLine)(VR_EMU_INST_AR
   if (top > y)
     return;
 
-  const uint8_t bottom = top + tms9918->registers[0x24];
-  if (bottom <= y)
+  y -= top;
+  if (y >= tms9918->registers[0x24])
     return;
 
   bool transp = bmlCtl & 0x20;
-  bool fat = bmlCtl & 0x10;
-
-  const uint8_t colorMask = fat ? 0xf0 : 0xc0;
-  const uint8_t colorOffset = fat ? 4 : 6;
-  const uint8_t colorCount = fat ? 2 : 4;
-  const uint8_t colorSize = fat ? 4 : 2;
-
-  uint8_t width = tms9918->registers[0x23] >> 2;
-  uint8_t pal = (bmlCtl & (fat ? 0xc : 0xf)) << 2;
-
-  uint16_t addr = (tms9918->registers[0x20] << 6) + ((y - top) * width);
+  const uint8_t width = tms9918->registers[0x23] ? (tms9918->registers[0x23] >> 2) : 64;
+  const uint16_t addr = (tms9918->registers[0x20] << 6) + (y * width);
 
   uint8_t xPos = tms9918->registers[0x21];
 
-  for (int i = 0; i < width; ++i)
+  if (bmlCtl & 0x10)  // fat 4bpp pixels?
   {
-    uint8_t data = tms9918->vram[addr + i];
-    for (int sp = 0; sp < colorCount; ++sp)
-    {
-      uint8_t color = ((data & colorMask) >> colorOffset);
-      if (!transp || color)
-      {
-        pixels[xPos++] = pal | color;
-        if (fat) pixels[xPos++] = pal | color;
-      }
-      else
-      {
-        xPos += 1 + fat;
-      }
-      data <<= colorSize;
-    }    
-  }
+    const uint8_t colorMask = 0xf0;
+    const uint8_t colorOffset = 4;
+    const uint8_t colorCount = 2;
+    const uint8_t colorSize = 4;
 
+    uint8_t pal = (bmlCtl & 0xc) << 2;
+
+    for (int xOff = 0; xOff < width; ++xOff)
+    {
+      uint8_t data = tms9918->vram[addr + xOff];
+      for (int sp = 0; sp < colorCount; ++sp)
+      {
+        uint8_t color = (data & colorMask);
+        if (!transp || color)
+        {
+          uint8_t finalColour = pal | (color >> colorOffset);
+          pixels[xPos] = finalColour;
+          pixels[xPos + 1] = finalColour;
+        }
+        xPos += 2;
+        data <<= colorSize;
+      }    
+    }
+  }
+  else // regular 2bpp pixels
+  {
+    const uint8_t colorMask = 0xc0;
+    const uint8_t colorOffset = 6;
+    const uint8_t colorCount = 4;
+    const uint8_t colorSize = 2;
+
+    uint8_t pal = (bmlCtl & 0xf) << 2;
+
+    for (int xOff = 0; xOff < width; ++xOff)
+    {
+      uint8_t data = tms9918->vram[addr + xOff];
+      for (int sp = 0; sp < colorCount; ++sp)
+      {
+        uint8_t color = (data & colorMask);
+        if (!transp || color)
+        {
+          pixels[xPos] = pal | (color >> colorOffset);
+        }
+        ++xPos;
+        data <<= colorSize;
+      }    
+    }
+  }
 }
 
 
@@ -1199,15 +1221,17 @@ static uint8_t __time_critical_func(vrEmuTms9918GraphicsIScanLine)(VR_EMU_INST_A
 {
   if (!ecmLookupReady) ecmLookupInit();
 
-  vrEmuTms9918BitmapLayerScanLine(VR_EMU_INST y, pixels, true);
+  const bool tilesDisabled = tms9918->registers[0x32] & 0x10;
 
-  vrEmuF18AT1ScanLine(y, pixels);
+  vrEmuTms9918BitmapLayerScanLine(VR_EMU_INST y, pixels, false);
+
+  if (!tilesDisabled) vrEmuF18AT1ScanLine(y, pixels);
 
   uint8_t tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
 
   if (tms9918->registers[0x31] & 0x80) vrEmuF18AT2ScanLine(y, pixels);
 
-  vrEmuTms9918BitmapLayerScanLine(VR_EMU_INST y, pixels, false);
+  vrEmuTms9918BitmapLayerScanLine(VR_EMU_INST y, pixels, true);
 
   return tempStatus;
 }
@@ -1392,8 +1416,8 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
     {
       uint8_t statReg = (value & 0x0f);
       tms9918->status [0x0F] = statReg;
-      if (value & 0x40) tms9918->startTime = time_us_64();
-      if (value & 0x20) tms9918->currentTime = time_us_64();
+      if (value & 0x40) tms9918->startTime = time_us_64();    // reset
+      if (value & 0x20) tms9918->currentTime = time_us_64();  // snap      
       else if (value & 0x10) tms9918->startTime += (tms9918->stopTime - tms9918->startTime);
       else tms9918->currentTime = tms9918->stopTime = time_us_64();
 
