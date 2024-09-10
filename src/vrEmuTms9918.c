@@ -511,10 +511,10 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
   uint8_t tempStatus = 0x1f;
 
   // ecm settings
-  uint8_t ecm = (tms9918->registers[0x31] & 0x03);
-  uint8_t ecmColorOffset = (ecm == 3) ? 2 : ecm;
-  uint8_t ecmColorMask = (ecm == 3) ? 0x0e : 0x0f;
-  int ecmOffset = 0x800 >> ((tms9918->registers[0x1d] & 0xc0) >> 6);
+  const uint8_t ecm = (tms9918->registers[0x31] & 0x03);
+  const uint8_t ecmColorOffset = (ecm == 3) ? 2 : ecm;
+  const uint8_t ecmColorMask = (ecm == 3) ? 0x0e : 0x0f;
+  const int ecmOffset = 0x800 >> ((tms9918->registers[0x1d] & 0xc0) >> 6);
 
   uint8_t pal = tms9918->registers[0x18] & 0x30;
   if (ecm == 1)
@@ -599,7 +599,7 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
      * left-aligned, so the first pixel in the sprite is the
      * MSB of spriteBits
      */
-    bool haveBits = false;
+    uint32_t pattMask = 0;
     uint16_t spriteBits[3] = {0}; // a 16-bit value for each ecm bit plane
     for (int i = 0; !i || (i < ecm); ++i)
     {
@@ -609,16 +609,17 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
         spriteBits[i] |= ((uint16_t)tms9918->vram[(pattOffset + PATTERN_BYTES * 2)]);
       }
       pattOffset += ecmOffset;
-      if (spriteBits[i]) haveBits = true;
+      pattMask |= spriteBits[i];
     }
 
-
     /* exit early if no bits to draw */
-    if (!haveBits)
+    if (!pattMask)
     {
       spriteAttr += SPRITE_ATTR_BYTES;
       continue;
     }
+
+    pattMask <<= 16;
 
     /* perform clipping operations */
     uint8_t thisSpriteSize = spriteSize;
@@ -628,6 +629,7 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
       {
         spriteBits[i] <<= -xPos;
       }
+      pattMask <<= -xPos;
       thisSpriteSize -= -xPos;
       xPos = 0;
     }
@@ -637,31 +639,15 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
       thisSpriteSize -= overflowPx;
     }
 
-    uint32_t pattMask = 0;
-    
-    if (ecm)
+    /* exit early if no bits to draw */
+    if (!pattMask)
     {
-      int mask = 0x8000;
-      for (int x = 0; x < spriteSize; ++x)
-      {
-        for (int i = 0; i < ecm; ++i)
-        {
-          if (spriteBits[i] & mask)
-          {
-            pattMask |= mask;
-            break;
-          }
-        }
-        mask >>= 1;
-      }
-    }
-    else
-    {
-      pattMask = spriteBits[0];
+      spriteAttr += SPRITE_ATTR_BYTES;
+      continue;
     }
 
     /* TODO: do something about magnified sprites */
-    pattMask <<= 16;
+
 
     /* test and update the collision mask */
     uint32_t validPixels = tmsTestCollisionMask(VR_EMU_INST xPos, pattMask, thisSpriteSize);
@@ -687,12 +673,14 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
                                        ((spriteBits[1] & 0xf000) >> 8) |
                                        ((spriteBits[2] & 0xf000) >> 4)];
 
-            for (int i = 0; i < 4; ++i)
-            {
-              uint8_t pix = color & 0x7;
-              if (pix) pixels[xPos + i] = spriteColor | pix;
-              color >>= 4;
-            }
+            uint16_t pix;
+            if (pix = color & 0x7) pixels[xPos] = spriteColor | pix;
+            pix >>= 4;
+            if (pix = color & 0x7) pixels[xPos + 1] = spriteColor | pix;
+            pix >>= 4;
+            if (pix = color & 0x7) pixels[xPos + 2] = spriteColor | pix;
+            pix >>= 4;
+            if (pix = color & 0x7) pixels[xPos + 3] = spriteColor | pix;
           }
           validPixels <<= 4;
           spriteBits[0] <<= 4;
