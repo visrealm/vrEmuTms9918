@@ -591,11 +591,11 @@ static void __time_critical_func(vrEmuTms9918Text80ScanLine)(VR_EMU_INST_ARG uin
 
   // Register 0x0A for text80 name table
 
-  uint8_t* rowNamesTable = tms9918->vram /*+ tmsNameTableAddr(tms9918)*/ + tileY * TEXT80_NUM_COLS;
+  uint8_t* rowNamesTable = tms9918->vram + (tmsNameTableAddr(tms9918) & (0x0c << 10)) + tileY * TEXT80_NUM_COLS;
   const uint8_t* patternTable = tms9918->vram + tms9918->patternTableAddr + pattRow;
 
-  const vrEmuTms9918Color bgColor = TMS_DK_BLUE;//tmsMainBgColor(tms9918);
-  const vrEmuTms9918Color fgColor = TMS_WHITE;//tmsMainFgColor(tms9918);
+  const vrEmuTms9918Color bgColor = tmsMainBgColor(tms9918);
+  const vrEmuTms9918Color fgColor = tmsMainFgColor(tms9918);
 
   const uint8_t bgFgColor[4] =
   {
