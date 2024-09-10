@@ -514,6 +514,11 @@ void initLookups()
   lookupsReady = true;
 }
 
+typedef union {
+    uint32_t value;
+    uint8_t bytes[4];
+} bytes32;
+
 
 
 /* Function:  vrEmuTms9918OutputSprites
@@ -630,7 +635,7 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
      * MSB of spriteBits
      */
     uint32_t pattMask = 0;
-    uint16_t spriteBits[3] = {0}; // a 16-bit value for each ecm bit plane
+    uint16_t spriteBits[4] = {0}; // a 16-bit value for each ecm bit plane
 
     /* load up the pattern data */
     if (flipX)
@@ -911,9 +916,9 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
   }
 
   uint8_t ecm = (tms9918->registers[0x31] & 0x30) >> 4;
-  uint8_t ecmColorOffset = (ecm == 3) ? 2 : ecm;
-  uint8_t ecmColorMask = (ecm == 3) ? 0x0e : 0x0f;
-  int ecmOffset = 0x800 >> ((tms9918->registers[0x1d] & 0x0c) >> 2);
+  const uint8_t ecmColorOffset = (ecm == 3) ? 2 : ecm;
+  const uint8_t ecmColorMask = (ecm == 3) ? 0x0e : 0x0f;
+  const int ecmOffset = 0x800 >> ((tms9918->registers[0x1d] & 0x0c) >> 2);
 
   uint8_t pal = (tms9918->registers[0x18] & 0x03) << 4;
   if (ecm == 1)
@@ -942,6 +947,11 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
 
   uint8_t startPattBit = tms9918->registers[0x1B] & 0x07;
   uint8_t tileIndex = tms9918->registers[0x1B] >> 3;
+  uint16_t lastEmpty = 0xffff;
+  uint16_t lastPattIdx = 0xffff;
+  uint8_t ecmColor;
+  uint8_t pattMask;
+  uint32_t lastColors;
 
   /* iterate over each tile in this row */
   while (pixels < end)
@@ -957,6 +967,15 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
     }
 
     const uint8_t pattIdx = tms9918->vram[rowNamesAddr + tileIndex];
+
+    if (lastEmpty == pattIdx)
+    {
+      xPos += 8;
+      pixels += 8;
+      ++tileIndex;
+      continue;
+    }
+
     uint16_t pattOffset = pattIdx * PATTERN_BYTES;
 
     if (ecm)
@@ -967,26 +986,43 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
       const bool priority = colorByte & 0x80;
       const bool flipX = colorByte & 0x40;
       const bool flipY = colorByte & 0x20;
-      const bool trans = colorByte & 0x10;
+      bool trans = colorByte & 0x10;
+      bool copyLast = pattIdx == lastPattIdx;
+      int count = 8;
+      uint8_t patternData[4] = {0};
 
-      pattOffset += flipY ? 7 - pattRow : pattRow;
-
-      uint8_t patternData[3] = {0}; // a 8-bit value for each ecm bit plane
-
-      uint8_t ecmColor = pal | ((colorByte & ecmColorMask) << ecmColorOffset);
-      uint8_t pattMask = 0;
-      for (int i = 0; i < ecm; ++i)
+      if (!copyLast)
       {
-        uint8_t planeBits = patternTable[pattOffset];
-        if (flipX) planeBits = reversedBits[planeBits];
-        patternData[i] = planeBits << startPattBit;
-        pattMask |= patternData[i];          
-        pattOffset += ecmOffset;
-      }
+        pattOffset += flipY ? 7 - pattRow : pattRow;
 
-      if (!trans) pattMask = 0xff;
-      
-      int count = 8 - startPattBit;
+        ecmColor = pal | ((colorByte & ecmColorMask) << ecmColorOffset);
+        pattMask = 0;
+        for (int i = 0; i < ecm; ++i)
+        {
+          uint8_t planeData = patternTable[pattOffset];
+          if (flipX) planeData = reversedBits[planeData];
+          pattMask |= planeData;
+          patternData[i] = planeData;
+          pattOffset += ecmOffset;
+        }
+
+        if (!trans) pattMask = 0xff;
+        else if (pattMask == 0xff) trans = false;
+
+        if (startPattBit)
+        {
+          pattMask <<= startPattBit;
+          count -= startPattBit;
+          for (int i = 0; i < ecm; ++i)
+          {
+            patternData[i] <<= startPattBit;
+          }
+        }
+        else
+        {
+          lastPattIdx = pattIdx;
+        }
+      }
 
       if (pattMask)
       {
@@ -996,25 +1032,48 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
           tmsTestCollisionMask(xPos, pattMask << 24, count);
         }
 
-        uint32_t colors = ecmLookup[(patternData[0] >> 4) |
-                                    (patternData[1] & 0xf0) |
-                                    ((patternData[2] & 0xf0) << 4)];
-
-        colors |= ecmLookup[(patternData[0] & 0xf) |
-                            ((patternData[1] & 0xf) << 4) |
-                            ((patternData[2] & 0xf) << 8)] << 16;
-
-        while (count--)
+        uint32_t colors;
+        if (copyLast)
         {
-          uint8_t pixColor = (colors & 0x07);
-          if (!trans || pixColor) *pixels = ecmColor | pixColor;
-          colors >>= 4;
-          ++pixels;
+          colors = lastColors;
+        }
+        else
+        {
+          colors = ecmLookup[(patternData[0] >> 4) |
+                             (patternData[1] & 0xf0) |
+                             ((patternData[2] & 0xf0) << 4)];
+
+          colors |= ecmLookup[(patternData[0] & 0xf) |
+                              ((patternData[1] & 0xf) << 4) |
+                              ((patternData[2] & 0xf) << 8)] << 16;
+          
+          lastColors = colors;
+        }
+
+        if (trans)
+        {
+          while (count--)
+          {
+            uint8_t pixColor = (colors & 0x07);
+            if (pixColor) *pixels = ecmColor | pixColor;
+            colors >>= 4;
+            ++pixels;
+          }
+        }
+        else
+        {
+          while (count--)
+          {
+            *pixels = ecmColor | (colors & 0x07);
+            colors >>= 4;
+            ++pixels;
+          }
         }
       }
       else
       {
         pixels += count;
+        if (!startPattBit) lastEmpty = pattIdx;
       }
     }
     else
@@ -1068,9 +1127,11 @@ static void __time_critical_func(vrEmuF18AT2ScanLine)(VR_EMU_INST_ARG uint8_t y,
   }
 
   uint8_t ecm = (tms9918->registers[0x31] & 0x30) >> 4;
-  uint8_t ecmColorOffset = (ecm == 3) ? 2 : ecm;
-  uint8_t ecmColorMask = (ecm == 3) ? 0x0e : 0x0f;
-  int ecmOffset = 0x800 >> ((tms9918->registers[0x1d] & 0xc0) >> 6);
+  const uint8_t ecmColorOffset = (ecm == 3) ? 2 : ecm;
+  const uint8_t ecmColorMask = (ecm == 3) ? 0x0e : 0x0f;
+  const int ecmOffset = 0x800 >> ((tms9918->registers[0x1d] & 0xc0) >> 6);
+
+  const bool tile2Priority = tms9918->registers[0x32] & 0x01;
 
   uint8_t pal = (tms9918->registers[0x18] & 0x0c) << 2;
   if (ecm == 1)
@@ -1099,6 +1160,12 @@ static void __time_critical_func(vrEmuF18AT2ScanLine)(VR_EMU_INST_ARG uint8_t y,
 
   uint8_t startPattBit = tms9918->registers[0x19] & 0x07;
   uint8_t tileIndex = tms9918->registers[0x19] >> 3;
+  uint16_t lastEmpty = 0xffff;
+  uint16_t lastPattIdx = 0xffff;
+  uint8_t ecmColor;
+  uint8_t pattMask;
+  uint32_t lastColors;
+  bool trans;
 
   /* iterate over each tile in this row */
   while (pixels < end)
@@ -1114,33 +1181,62 @@ static void __time_critical_func(vrEmuF18AT2ScanLine)(VR_EMU_INST_ARG uint8_t y,
     }
 
     const uint8_t pattIdx = tms9918->vram[rowNamesAddr + tileIndex];
+    if (lastEmpty == pattIdx)
+    {
+      xPos += 8;
+      pixels += 8;
+      ++tileIndex;
+      continue;
+    }
+
     uint16_t pattOffset = pattIdx * PATTERN_BYTES;
 
     if (ecm)
     {
     /* iterate over each bit of this pattern byte */
       const uint8_t colorByte = tms9918->vram[colorTableAddr + (attrPerPos ? (rowOffset + tileIndex) : pattIdx)];
-      const bool priority = colorByte & 0x80;
+      const bool priority = tile2Priority && (colorByte & 0x80);
       const bool flipX = colorByte & 0x40;
       const bool flipY = colorByte & 0x20;
-      const bool trans = colorByte & 0x10;
 
-      uint8_t patternData[3] = {0}; // a 8-bit value for each ecm bit plane
+      bool copyLast = pattIdx == lastPattIdx;
+      int count = 8;
+      uint8_t patternData[4] = {0};
 
-      pattOffset += flipY ? 7 - pattRow : pattRow;
-
-      uint8_t ecmColor = pal | ((colorByte & ecmColorMask) << ecmColorOffset);
-      uint8_t pattMask = 0;
-      for (int i = 0; i < ecm; ++i)
+      if (!copyLast)
       {
-        patternData[i] = (flipX ? reversedBits[patternTable[pattOffset]] : patternTable[pattOffset]) << startPattBit;
-        pattMask |= patternData[i];          
-        pattOffset += ecmOffset;
+        trans = colorByte & 0x10;
+        pattOffset += flipY ? 7 - pattRow : pattRow;
+
+        ecmColor = pal | ((colorByte & ecmColorMask) << ecmColorOffset);
+        pattMask = 0;
+        for (int i = 0; i < ecm; ++i)
+        {
+          uint8_t planeData = patternTable[pattOffset];
+          if (flipX) planeData = reversedBits[planeData];
+          pattMask |= planeData;
+          patternData[i] = planeData;
+          pattOffset += ecmOffset;
+        }
+
+        if (!trans) pattMask = 0xff;
+        else if (pattMask == 0xff) trans = false;
+
+        if (startPattBit)
+        {
+          pattMask <<= startPattBit;
+          count -= startPattBit;
+          for (int i = 0; i < ecm; ++i)
+          {
+            patternData[i] <<= startPattBit;
+          }
+        }
+        else
+        {
+          lastPattIdx = pattIdx;
+        }
       }
-
-      int count = 8 - startPattBit;
-      if (!trans) pattMask = 0xff;
-
+      
       if (pattMask)
       {
         if (count > (end - pixels)) count = end - pixels;
@@ -1149,25 +1245,48 @@ static void __time_critical_func(vrEmuF18AT2ScanLine)(VR_EMU_INST_ARG uint8_t y,
           tmsTestCollisionMask(xPos, pattMask << 24, count);
         }
 
-        uint32_t colors = ecmLookup[(patternData[0] >> 4) |
-                                    (patternData[1] & 0xf0) |
-                                    ((patternData[2] & 0xf0) << 4)];
-
-        colors |= ecmLookup[(patternData[0] & 0xf) |
-                            ((patternData[1] & 0xf) << 4) |
-                            ((patternData[2] & 0xf) << 8)] << 16;
-
-        while (count--)
+        uint32_t colors;
+        if (copyLast)
         {
-          uint8_t pixColor = (colors & 0x07);
-          if (!trans || pixColor) *pixels = ecmColor | pixColor;
-          colors >>= 4;
-          ++pixels;
+          colors = lastColors;
+        }
+        else
+        {
+          colors = ecmLookup[(patternData[0] >> 4) |
+                                      (patternData[1] & 0xf0) |
+                                      ((patternData[2] & 0xf0) << 4)];
+
+          colors |= ecmLookup[(patternData[0] & 0xf) |
+                              ((patternData[1] & 0xf) << 4) |
+                              ((patternData[2] & 0xf) << 8)] << 16;
+          
+          lastColors = colors;
+        }
+
+        if (trans)
+        {
+          while (count--)
+          {
+            uint8_t pixColor = (colors & 0x07);
+            if (pixColor) *pixels = ecmColor | pixColor;
+            colors >>= 4;
+            ++pixels;
+          }
+        }
+        else
+        {
+          while (count--)
+          {
+            *pixels = ecmColor | (colors & 0x07);
+            colors >>= 4;
+            ++pixels;
+          }
         }
       }
       else
       {
         pixels += count;
+        if (!startPattBit) lastEmpty = pattIdx;
       }
     }
     else
@@ -1392,38 +1511,46 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ScanLine)(VR_E
 
   if (!lookupsReady) initLookups();
 
-  tmsMemset(pixels, tmsMainBgColor(tms9918), TMS9918_PIXELS_X);
-  if (!(tms9918->registers[TMS_REG_1] & TMS_R1_DISP_ACTIVE))
-    return tempStatus;
+  bool dispActive = (tms9918->registers[TMS_REG_1] & TMS_R1_DISP_ACTIVE);
 
-  for (int i = 0; i < TMS9918_PIXELS_X / 32; ++i)
+  /* if the display is inactive OR we have a low priority bitmap layer, we need to clear the buffer */
+  //if (!dispActive || ((tms9918->registers[0x1f] & 0xc0) == 0x80))
   {
-    tms9918->rowSpriteBits[i] = 0;
+    tmsMemset(pixels, tmsMainBgColor(tms9918), TMS9918_PIXELS_X);
   }
 
-  switch (tmsMode(tms9918))
+  if (dispActive)
   {
-    case TMS_MODE_GRAPHICS_I:
-      tempStatus = vrEmuTms9918GraphicsIScanLine(VR_EMU_INST y, pixels);
-      break;
+    /* use rowSpriteBits as a mask when tiles have priority over sprites */
+    for (int i = 0; i < TMS9918_PIXELS_X / 32; ++i)
+    {
+      tms9918->rowSpriteBits[i] = 0;
+    }
 
-    case TMS_MODE_GRAPHICS_II:
-      vrEmuTms9918GraphicsIIScanLine(VR_EMU_INST y, pixels);
-      tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
-      break;
+    switch (tmsMode(tms9918))
+    {
+      case TMS_MODE_GRAPHICS_I:
+        tempStatus = vrEmuTms9918GraphicsIScanLine(VR_EMU_INST y, pixels);
+        break;
 
-    case TMS_MODE_TEXT:
-      vrEmuTms9918TextScanLine(VR_EMU_INST y, pixels);
-      break;
+      case TMS_MODE_GRAPHICS_II:
+        vrEmuTms9918GraphicsIIScanLine(VR_EMU_INST y, pixels);
+        tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
+        break;
 
-    case TMS_MODE_MULTICOLOR:
-      vrEmuTms9918MulticolorScanLine(VR_EMU_INST y, pixels);
-      tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
-      break;
+      case TMS_MODE_TEXT:
+        vrEmuTms9918TextScanLine(VR_EMU_INST y, pixels);
+        break;
 
-    case TMS_R0_MODE_TEXT_80:
-      vrEmuTms9918Text80ScanLine(VR_EMU_INST y, pixels);
-      break;
+      case TMS_MODE_MULTICOLOR:
+        vrEmuTms9918MulticolorScanLine(VR_EMU_INST y, pixels);
+        tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
+        break;
+
+      case TMS_R0_MODE_TEXT_80:
+        vrEmuTms9918Text80ScanLine(VR_EMU_INST y, pixels);
+        break;
+    }
   }
 
   return tempStatus;
