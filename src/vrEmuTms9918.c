@@ -675,12 +675,9 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
 
             uint16_t pix;
             if (pix = color & 0x7) pixels[xPos] = spriteColor | pix;
-            pix >>= 4;
-            if (pix = color & 0x7) pixels[xPos + 1] = spriteColor | pix;
-            pix >>= 4;
-            if (pix = color & 0x7) pixels[xPos + 2] = spriteColor | pix;
-            pix >>= 4;
-            if (pix = color & 0x7) pixels[xPos + 3] = spriteColor | pix;
+            if (pix = color & 0x70) pixels[xPos + 1] = spriteColor | (pix >> 4);
+            if (pix = color & 0x700) pixels[xPos + 2] = spriteColor | (pix >> 8);
+            if (pix = color & 0x7000) pixels[xPos + 3] = spriteColor | (pix >> 12);
           }
           validPixels <<= 4;
           spriteBits[0] <<= 4;
