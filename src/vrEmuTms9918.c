@@ -300,6 +300,7 @@ VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918Reset)(VR_EMU_INS
   tms9918->unlockCount = 0;
   tms9918->restart = 0;
   tmsMemset(tms9918->registers, 0, sizeof(tms9918->registers));
+  tms9918->registers [0x1e] = MAX_SCANLINE_SPRITES;
   tms9918->registers [0x30] = 1; // vram address increment register
   tms9918->registers [0x33] = 32; // Sprites to process
 
@@ -609,12 +610,15 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
     /* have we exceeded the scanline sprite limit? */
     if (++spritesShown > MAX_SCANLINE_SPRITES)
     {
-      if ((tempStatus & STATUS_5S) == 0)
+      if (((tempStatus & STATUS_5S) == 0) && 
+          ((tms9918->registers[0x32] & 0x80) == 0 || spritesShown > tms9918->registers[0x1e]))
       {
         tempStatus &= 0xe0;
         tempStatus |= STATUS_5S | spriteIdx;
       }
-      //break;
+
+      if (spritesShown > tms9918->registers[0x1e])
+        break;
     }
 
     const bool flipY = spriteAttr[SPRITE_ATTR_COLOR] & 0x20;
@@ -635,32 +639,51 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
      */
     uint32_t pattMask = 0;
     uint16_t spriteBits[3] = {0}; // a 16-bit value for each ecm bit plane
-    for (int i = 0; !i || (i < ecm); ++i)
+
+    /* load up the pattern data */
+    if (flipX)
     {
-      spriteBits[i] = ((uint16_t)tms9918->vram[pattOffset]) << 8;
+      /* Note: I've made the choice to branch early for some of the sprite options
+              to improve performance for each case (reduce branches in loops) */
       if (thisSprite16)
       {
-        spriteBits[i] |= ((uint16_t)tms9918->vram[(pattOffset + PATTERN_BYTES * 2)]);
+        for (int i = 0; !i || (i < ecm); ++i)
+        {
+          spriteBits[i] = reversedBits[tms9918->vram[pattOffset]];
+          spriteBits[i] |= reversedBits[tms9918->vram[(pattOffset + PATTERN_BYTES * 2)]] << 8;
+          pattOffset += ecmOffset;
+          pattMask |= spriteBits[i];
+        }
       }
-      pattOffset += ecmOffset;
-      pattMask |= spriteBits[i];
+      else
+      {
+        for (int i = 0; !i || (i < ecm); ++i)
+        {
+          spriteBits[i] = reversedBits[tms9918->vram[pattOffset]] << 8;
+          pattOffset += ecmOffset;
+          pattMask |= spriteBits[i];
+        }
+      }
+    }
+    else
+    {
+      for (int i = 0; !i || (i < ecm); ++i)
+      {
+        spriteBits[i] = tms9918->vram[pattOffset] << 8;
+        if (thisSprite16)
+        {
+          spriteBits[i] |= tms9918->vram[(pattOffset + PATTERN_BYTES * 2)];
+        }
+        pattOffset += ecmOffset;
+        pattMask |= spriteBits[i];
+      }
     }
 
-    /* exit early if no bits to draw */
+    /* bail early if no bits to draw */
     if (!pattMask)
     {
       spriteAttr += SPRITE_ATTR_BYTES;
       continue;
-    }
-
-    if (flipX)
-    {
-      pattMask = 0;
-      for (int i = 0; !i || (i < ecm); ++i)
-      {
-        spriteBits[i] = reversedBits[spriteBits[i] >> 8] | (reversedBits[spriteBits[i] & 0xff] << 8);
-        pattMask |= spriteBits[i];
-      }
     }
 
     if (spriteMag)
@@ -681,6 +704,14 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
         spriteBits[i] <<= offset;
       }
       pattMask <<= -xPos;
+      
+      /* bail early if no bits to draw */
+      if (!pattMask)
+      {
+        spriteAttr += SPRITE_ATTR_BYTES;
+        continue;
+      }
+
       thisSpriteSizePx -= -xPos;
       xPos = 0;
     }
@@ -688,13 +719,6 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
     if (overflowPx > 0)
     {
       thisSpriteSizePx -= overflowPx;
-    }
-
-    /* exit early if no bits to draw */
-    if (!pattMask)
-    {
-      spriteAttr += SPRITE_ATTR_BYTES;
-      continue;
     }
 
     /* test and update the collision mask */
@@ -712,6 +736,10 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
       spriteColor |= pal;
       if (ecm)
       {
+
+      /* Note: Again, I've made the choice to branch early for some of the sprite options
+              to improve performance for each case (reduce branches in loops) */
+
         if (spriteMag)
         {
           while (validPixels)
@@ -727,7 +755,7 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
               if (pix = color & 0x7) pixels[xPos] = pixels[xPos + 1] = spriteColor | pix;
               if (pix = color & 0x70) pixels[xPos + 2] = pixels[xPos + 3] = spriteColor | (pix >> 4);
               if (pix = color & 0x700) pixels[xPos + 4] = pixels[xPos + 5] = spriteColor | (pix >> 8);
-              if (pix = color & 0x7000) pixels[xPos + 6] = pixels[xPos + 7] =spriteColor | (pix >> 12);
+              if (pix = color & 0x7000) pixels[xPos + 6] = pixels[xPos + 7] = spriteColor | (pix >> 12);
             }
             validPixels <<= 8;
             spriteBits[0] <<= 4;
@@ -1465,6 +1493,7 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
       tms9918->registers [0x05] = 0x0A;
       tms9918->registers [0x06] = 0x02;
       tms9918->registers [0x07] = 0xF2;
+      tms9918->registers [0x1e] = MAX_SCANLINE_SPRITES;
       tms9918->registers [0x30] = 1; // vram address increment register
       tms9918->registers [0x33] = 32; // Sprites to process
       tms9918->registers [0x36] = 0x40;
