@@ -453,7 +453,6 @@ __aligned(4) uint8_t doubledBitsNibble[16] = {
 
 /* lookup for combining ecm nibbles, returning 4 pixels */
 static uint16_t __aligned(4) ecmLookup[16 * 16 * 16];
-static bool ecmLookupReady = false;
 
 static uint8_t ecmByte(bool h, bool m, bool l)
 {
@@ -473,22 +472,45 @@ static void ecmLookupInit()
                    (ecmByte(i & 0x200, i & 0x020, i & 0x002) << 8) |
                    (ecmByte(i & 0x100, i & 0x010, i & 0x001) << 12);
   }
-
-  ecmLookupReady = true;
 }
 
 
 /* lookup for doubling pixel patterns in mag mode */
 static __aligned(4) uint16_t doubledBits[256];
-static bool doubledBitsReady = false;
-
 static void doubledBitsInit()
 {
   for (int i = 0; i < 256; ++i)
   {
     doubledBits[i] = (doubledBitsNibble[(i & 0xf0) >> 4] << 8) | doubledBitsNibble[i & 0x0f];
   }
-  doubledBitsReady = true;
+}
+
+/* reversed bits in a byte */
+static __aligned(4) uint8_t reversedBits[256];
+
+uint8_t reverseBits(uint8_t byte) {
+    byte = (byte & 0xf0) >> 4 | (byte & 0x0f) << 4;
+    byte = (byte & 0xcc) >> 2 | (byte & 0x33) << 2;
+    return (byte & 0xaa) >> 1 | (byte & 0x55) << 1;
+}
+
+static void reversedBitsInit()
+{
+  for (int i = 0; i < 256; ++i)
+  {
+    reversedBits[i] = reverseBits(i);
+  }
+}
+
+bool lookupsReady = false;
+void initLookups()
+{
+  if (lookupsReady) return;
+
+  ecmLookupInit();
+  doubledBitsInit();
+  reversedBitsInit();
+  lookupsReady = true;
 }
 
 
@@ -554,15 +576,23 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
     if (spriteMag)
     {
       pattRow >>= 1;  // this needs to be a shift because -1 / 2 becomes 0. Bad.
+    }
 
-      if (!doubledBitsReady) // initialise our doubledBits lookup?
-      {
-        doubledBitsInit();
-      }
+    uint8_t thisSpriteSize = spriteSize;
+    bool thisSprite16 = sprite16;
+    uint8_t thisSpriteIdxMask = spriteIdxMask;
+    uint8_t thisSpriteSizePx = spriteSizePx;
+
+    if (!sprite16 && (spriteAttr[SPRITE_ATTR_COLOR] & 0x10))
+    {
+      thisSpriteSize = 16;
+      thisSprite16 = true;
+      thisSpriteIdxMask = 0xfc;
+      thisSpriteSizePx = thisSpriteSize * (spriteMag + 1);
     }
 
     /* check if sprite is visible on this line */
-    if (pattRow < 0 || pattRow >= spriteSize)
+    if (pattRow < 0 || pattRow >= thisSpriteSize)
     {
       spriteAttr += SPRITE_ATTR_BYTES;
       continue;
@@ -587,9 +617,13 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
       //break;
     }
 
+    const bool flipY = spriteAttr[SPRITE_ATTR_COLOR] & 0x20;
+    const bool flipX = spriteAttr[SPRITE_ATTR_COLOR] & 0x40;
+    if (flipY) pattRow = thisSpriteSize - pattRow;
+
     /* sprite is visible on this line */
     uint8_t spriteColor = (spriteAttr[SPRITE_ATTR_COLOR] & ecmColorMask) << ecmColorOffset;
-    const uint8_t pattIdx = spriteAttr[SPRITE_ATTR_NAME] & spriteIdxMask;
+    const uint8_t pattIdx = spriteAttr[SPRITE_ATTR_NAME] & thisSpriteIdxMask;
     uint16_t pattOffset = spritePatternAddr + pattIdx * PATTERN_BYTES + (uint16_t)pattRow;
 
     const int16_t earlyClockOffset = (spriteAttr[SPRITE_ATTR_COLOR] & 0x80) ? -32 : 0;
@@ -604,7 +638,7 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
     for (int i = 0; !i || (i < ecm); ++i)
     {
       spriteBits[i] = ((uint16_t)tms9918->vram[pattOffset]) << 8;
-      if (sprite16)
+      if (thisSprite16)
       {
         spriteBits[i] |= ((uint16_t)tms9918->vram[(pattOffset + PATTERN_BYTES * 2)]);
       }
@@ -619,24 +653,41 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
       continue;
     }
 
-    pattMask <<= 16;
+    if (flipX)
+    {
+      pattMask = 0;
+      for (int i = 0; !i || (i < ecm); ++i)
+      {
+        spriteBits[i] = reversedBits[spriteBits[i] >> 8] | (reversedBits[spriteBits[i] & 0xff] << 8);
+        pattMask |= spriteBits[i];
+      }
+    }
+
+    if (spriteMag)
+    {
+      pattMask = (doubledBits[pattMask >> 8] << 16) | doubledBits[pattMask & 0xff];
+    }
+    else
+    {
+      pattMask <<= 16;
+    }
 
     /* perform clipping operations */
-    uint8_t thisSpriteSize = spriteSize;
     if (xPos < 0)
     {
-      for (int i = 0; i == 0 || i < ecm; ++i)
+      int16_t offset = spriteMag ? -xPos / 2 : -xPos;
+      for (int i = 0; i < ecm; ++i)
       {
-        spriteBits[i] <<= -xPos;
+        spriteBits[i] <<= offset;
       }
       pattMask <<= -xPos;
-      thisSpriteSize -= -xPos;
+      thisSpriteSizePx -= -xPos;
       xPos = 0;
     }
-    int overflowPx = (xPos + thisSpriteSize) - TMS9918_PIXELS_X;
+    int overflowPx = (xPos + thisSpriteSizePx) - TMS9918_PIXELS_X;
     if (overflowPx > 0)
     {
-      thisSpriteSize -= overflowPx;
+      thisSpriteSizePx -= overflowPx;
     }
 
     /* exit early if no bits to draw */
@@ -646,11 +697,8 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
       continue;
     }
 
-    /* TODO: do something about magnified sprites */
-
-
     /* test and update the collision mask */
-    uint32_t validPixels = tmsTestCollisionMask(VR_EMU_INST xPos, pattMask, thisSpriteSize);
+    uint32_t validPixels = tmsTestCollisionMask(VR_EMU_INST xPos, pattMask, thisSpriteSizePx);
 
     /* if the result is different, we collided */
     if (validPixels != pattMask)
@@ -664,26 +712,53 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
       spriteColor |= pal;
       if (ecm)
       {
-        while (validPixels)
+        if (spriteMag)
         {
-          /* output the sprite pixels 4 at a time */
-          if (validPixels & 0xf0000000)
+          while (validPixels)
           {
-            uint16_t color = ecmLookup[((spriteBits[0] & 0xf000) >> 12) |
-                                       ((spriteBits[1] & 0xf000) >> 8) |
-                                       ((spriteBits[2] & 0xf000) >> 4)];
+            /* output the sprite pixels 4 at a time */
+            if (validPixels & 0xff000000)
+            {
+              uint16_t color = ecmLookup[((spriteBits[0] & 0xf000) >> 12) |
+                                        ((spriteBits[1] & 0xf000) >> 8) |
+                                        ((spriteBits[2] & 0xf000) >> 4)];
 
-            uint16_t pix;
-            if (pix = color & 0x7) pixels[xPos] = spriteColor | pix;
-            if (pix = color & 0x70) pixels[xPos + 1] = spriteColor | (pix >> 4);
-            if (pix = color & 0x700) pixels[xPos + 2] = spriteColor | (pix >> 8);
-            if (pix = color & 0x7000) pixels[xPos + 3] = spriteColor | (pix >> 12);
+              uint16_t pix;
+              if (pix = color & 0x7) pixels[xPos] = pixels[xPos + 1] = spriteColor | pix;
+              if (pix = color & 0x70) pixels[xPos + 2] = pixels[xPos + 3] = spriteColor | (pix >> 4);
+              if (pix = color & 0x700) pixels[xPos + 4] = pixels[xPos + 5] = spriteColor | (pix >> 8);
+              if (pix = color & 0x7000) pixels[xPos + 6] = pixels[xPos + 7] =spriteColor | (pix >> 12);
+            }
+            validPixels <<= 8;
+            spriteBits[0] <<= 4;
+            spriteBits[1] <<= 4;
+            spriteBits[2] <<= 4;
+            xPos += 8;
           }
-          validPixels <<= 4;
-          spriteBits[0] <<= 4;
-          spriteBits[1] <<= 4;
-          spriteBits[2] <<= 4;
-          xPos += 4;
+        }
+        else
+        {
+          while (validPixels)
+          {
+            /* output the sprite pixels 4 at a time */
+            if (validPixels & 0xf0000000)
+            {
+              uint16_t color = ecmLookup[((spriteBits[0] & 0xf000) >> 12) |
+                                        ((spriteBits[1] & 0xf000) >> 8) |
+                                        ((spriteBits[2] & 0xf000) >> 4)];
+
+              uint16_t pix;
+              if (pix = color & 0x7) pixels[xPos] = spriteColor | pix;
+              if (pix = color & 0x70) pixels[xPos + 1] = spriteColor | (pix >> 4);
+              if (pix = color & 0x700) pixels[xPos + 2] = spriteColor | (pix >> 8);
+              if (pix = color & 0x7000) pixels[xPos + 3] = spriteColor | (pix >> 12);
+            }
+            validPixels <<= 4;
+            spriteBits[0] <<= 4;
+            spriteBits[1] <<= 4;
+            spriteBits[2] <<= 4;
+            xPos += 4;
+          }
         }
       }
       else
@@ -696,7 +771,7 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
           }
           validPixels <<= 1;
           ++xPos;
-        }
+        }          
       }
     }
 
@@ -1204,8 +1279,6 @@ static void __time_critical_func(vrEmuTms9918BitmapLayerScanLine)(VR_EMU_INST_AR
  */
 static uint8_t __time_critical_func(vrEmuTms9918GraphicsIScanLine)(VR_EMU_INST_ARG uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
-  if (!ecmLookupReady) ecmLookupInit();
-
   const bool tilesDisabled = tms9918->registers[0x32] & 0x10;
 
   vrEmuTms9918BitmapLayerScanLine(VR_EMU_INST y, pixels, false);
@@ -1309,6 +1382,8 @@ static void __time_critical_func(vrEmuTms9918MulticolorScanLine)(VR_EMU_INST_ARG
 VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ScanLine)(VR_EMU_INST_ARG uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
   uint8_t tempStatus = 0;
+
+  if (!lookupsReady) initLookups();
 
   tmsMemset(pixels, tmsMainBgColor(tms9918), TMS9918_PIXELS_X);
   if (!(tms9918->registers[TMS_REG_1] & TMS_R1_DISP_ACTIVE))
