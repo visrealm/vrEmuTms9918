@@ -618,6 +618,14 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
         break;
     }
 
+    const int16_t earlyClockOffset = (spriteAttr[SPRITE_ATTR_COLOR] & 0x80) ? -32 : 0;
+    int16_t xPos = (int16_t)(spriteAttr[SPRITE_ATTR_X]) + earlyClockOffset;
+    if ((xPos > TMS9918_PIXELS_X) || (-xPos > thisSpriteSizePx))
+    {
+      spriteAttr += SPRITE_ATTR_BYTES;
+      continue;
+    }
+
     const bool flipY = spriteAttr[SPRITE_ATTR_COLOR] & 0x20;
     const bool flipX = spriteAttr[SPRITE_ATTR_COLOR] & 0x40;
     if (flipY) pattRow = thisSpriteSize - pattRow;
@@ -627,8 +635,6 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
     const uint8_t pattIdx = spriteAttr[SPRITE_ATTR_NAME] & thisSpriteIdxMask;
     uint16_t pattOffset = spritePatternAddr + pattIdx * PATTERN_BYTES + (uint16_t)pattRow;
 
-    const int16_t earlyClockOffset = (spriteAttr[SPRITE_ATTR_COLOR] & 0x80) ? -32 : 0;
-    int16_t xPos = (int16_t)(spriteAttr[SPRITE_ATTR_X]) + earlyClockOffset;
 
     /* create a 32-bit mask of this sprite's pixels
      * left-aligned, so the first pixel in the sprite is the
