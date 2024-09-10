@@ -599,14 +599,6 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
       continue;
     }
 
-    if (spritesShown == 0)
-    {
-      for (int i = 0; i < TMS9918_PIXELS_X / 32; ++i)
-      {
-        tms9918->rowSpriteBits[i] = 0;
-      }
-    }
-
     /* have we exceeded the scanline sprite limit? */
     if (++spritesShown > MAX_SCANLINE_SPRITES)
     {
@@ -935,6 +927,7 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
 
   const uint8_t tileY = y >> 3;   /* which name table row (0 - 23)... or 29 */
   const uint8_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
+  int xPos = 0;
 
   /* address in name table at the start of this row */
   uint16_t rowOffset = tileY * GRAPHICS_NUM_COLS;
@@ -971,6 +964,7 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
       /* iterate over each bit of this pattern byte */
       const uint8_t colorByte = tms9918->vram[colorTableAddr + (attrPerPos ? (rowOffset + tileIndex) : pattIdx)];
 
+      const bool priority = colorByte & 0x80;
       const bool flipX = colorByte & 0x40;
       const bool flipY = colorByte & 0x20;
       const bool trans = colorByte & 0x10;
@@ -990,11 +984,17 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
         pattOffset += ecmOffset;
       }
 
+      if (!trans) pattMask = 0xff;
+      
       int count = 8 - startPattBit;
 
-      if (!trans || pattMask)
+      if (pattMask)
       {
         if (count > (end - pixels)) count = end - pixels;
+        if (priority)
+        {
+          tmsTestCollisionMask(xPos, pattMask << 24, count);
+        }
 
         uint32_t colors = ecmLookup[(patternData[0] >> 4) |
                                     (patternData[1] & 0xf0) |
@@ -1036,6 +1036,7 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
         pattByte <<= 1;
       }
     }
+    xPos += 8 - startPattBit;
     startPattBit = 0;
     ++tileIndex;
   }
@@ -1083,6 +1084,7 @@ static void __time_critical_func(vrEmuF18AT2ScanLine)(VR_EMU_INST_ARG uint8_t y,
 
   const uint8_t tileY = y >> 3;   /* which name table row (0 - 23)... or 29 */
   const uint8_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
+  int xPos = 0;
 
   /* address in name table at the start of this row */
   uint16_t rowOffset = tileY * GRAPHICS_NUM_COLS;
@@ -1118,6 +1120,7 @@ static void __time_critical_func(vrEmuF18AT2ScanLine)(VR_EMU_INST_ARG uint8_t y,
     {
     /* iterate over each bit of this pattern byte */
       const uint8_t colorByte = tms9918->vram[colorTableAddr + (attrPerPos ? (rowOffset + tileIndex) : pattIdx)];
+      const bool priority = colorByte & 0x80;
       const bool flipX = colorByte & 0x40;
       const bool flipY = colorByte & 0x20;
       const bool trans = colorByte & 0x10;
@@ -1136,10 +1139,15 @@ static void __time_critical_func(vrEmuF18AT2ScanLine)(VR_EMU_INST_ARG uint8_t y,
       }
 
       int count = 8 - startPattBit;
+      if (!trans) pattMask = 0xff;
 
-      if (!trans || pattMask)
+      if (pattMask)
       {
         if (count > (end - pixels)) count = end - pixels;
+        if (priority)
+        {
+          tmsTestCollisionMask(xPos, pattMask << 24, count);
+        }
 
         uint32_t colors = ecmLookup[(patternData[0] >> 4) |
                                     (patternData[1] & 0xf0) |
@@ -1181,6 +1189,7 @@ static void __time_critical_func(vrEmuF18AT2ScanLine)(VR_EMU_INST_ARG uint8_t y,
         pattByte <<= 1;
       }
     }
+    xPos += 8 - startPattBit;
     startPattBit = 0;
     ++tileIndex;
   }
@@ -1386,6 +1395,11 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ScanLine)(VR_E
   tmsMemset(pixels, tmsMainBgColor(tms9918), TMS9918_PIXELS_X);
   if (!(tms9918->registers[TMS_REG_1] & TMS_R1_DISP_ACTIVE))
     return tempStatus;
+
+  for (int i = 0; i < TMS9918_PIXELS_X / 32; ++i)
+  {
+    tms9918->rowSpriteBits[i] = 0;
+  }
 
   switch (tmsMode(tms9918))
   {
