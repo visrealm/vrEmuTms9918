@@ -431,9 +431,10 @@ static inline uint32_t tmsTestCollisionMask(VR_EMU_INST_ARG uint8_t xPos, uint32
 
   if ((rowSpriteBitsWordBit + spriteWidth) > 32)
   {
-    uint32_t right = (~tms9918->rowSpriteBits[rowSpriteBitsWord + 1]) & (spritePixels << (32 - rowSpriteBitsWordBit));
+    rowSpriteBitsWordBit = ~rowSpriteBitsWordBit & 0x1f;
+    uint32_t right = (~tms9918->rowSpriteBits[rowSpriteBitsWord + 1]) & (spritePixels << rowSpriteBitsWordBit);
     tms9918->rowSpriteBits[rowSpriteBitsWord + 1] |= right;
-    validPixels |= (right >> (32 - rowSpriteBitsWordBit));
+    validPixels |= (right >> rowSpriteBitsWordBit);
   }
 
   return validPixels;
@@ -475,6 +476,16 @@ static void ecmLookupInit()
   }
 }
 
+/* random note about how palettes are applied:
+ * PR Address bit: 0 1 2 3 4 5
+ * --------------------------------------
+ * original mode: ps0 ps1 cs0 cs1 cs2 cs3
+ * 1-bit (ECM1) : ps0 cs0 cs1 cs2 cs3 px0
+ * 2-bit (ECM2) : cs0 cs1 cs2 cs3 px1 px0
+ * 3-bit (ECM3) : cs0 cs1 cs2 px2 px1 px0
+*/
+
+
 
 /* lookup for doubling pixel patterns in mag mode */
 static __aligned(4) uint16_t doubledBits[256];
@@ -502,6 +513,11 @@ static void reversedBitsInit()
     reversedBits[i] = reverseBits(i);
   }
 }
+
+/* a lookup to apply a palette to 4 bytes of a uint32_t */
+
+/* a lookup to map a byte to a 4x repeated byte (for memset) */
+
 
 bool lookupsReady = false;
 void initLookups()
@@ -701,7 +717,8 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
     /* perform clipping operations */
     if (xPos < 0)
     {
-      int16_t offset = spriteMag ? -xPos / 2 : -xPos;
+      int16_t offset = -xPos;
+      if (spriteMag) offset >>= 1; 
       for (int i = 0; i < ecm; ++i)
       {
         spriteBits[i] <<= offset;
@@ -724,8 +741,8 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
       thisSpriteSizePx -= overflowPx;
     }
 
-    /* test and update the collision mask */
-    uint32_t validPixels = tmsTestCollisionMask(VR_EMU_INST xPos, pattMask, thisSpriteSizePx);
+    /* test and update the collision mask - signed, because we test for msb using less-than */
+    int32_t validPixels = tmsTestCollisionMask(VR_EMU_INST xPos, pattMask, thisSpriteSizePx);
 
     /* if the result is different, we collided */
     if (validPixels != pattMask)
@@ -748,17 +765,17 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
           while (validPixels)
           {
             /* output the sprite pixels 4 at a time */
-            if (validPixels & 0xff000000)
+            if (validPixels >> 24)
             {
-              uint16_t color = ecmLookup[((spriteBits[0] & 0xf000) >> 12) |
-                                        ((spriteBits[1] & 0xf000) >> 8) |
-                                        ((spriteBits[2] & 0xf000) >> 4)];
+              uint16_t color = ecmLookup[(spriteBits[0] >> 12) |
+                                        ((spriteBits[1] >> 12) << 4) |
+                                        ((spriteBits[2] >> 12) << 8)];
 
-              uint16_t pix;
-              if (pix = color & 0x7) pixels[xPos] = pixels[xPos + 1] = spriteColor | pix;
-              if (pix = color & 0x70) pixels[xPos + 2] = pixels[xPos + 3] = spriteColor | (pix >> 4);
-              if (pix = color & 0x700) pixels[xPos + 4] = pixels[xPos + 5] = spriteColor | (pix >> 8);
-              if (pix = color & 0x7000) pixels[xPos + 6] = pixels[xPos + 7] = spriteColor | (pix >> 12);
+              uint8_t pix = color & 0x7;
+              if (pix) pixels[xPos] = pixels[xPos + 1] = spriteColor | pix;
+              if (pix = (color >>= 4) & 0x7) pixels[xPos + 2] = pixels[xPos + 3] = spriteColor | pix;
+              if (pix = (color >>= 4) & 0x7) pixels[xPos + 4] = pixels[xPos + 5] = spriteColor | pix;
+              if (pix = (color >>= 4) & 0x7) pixels[xPos + 6] = pixels[xPos + 7] = spriteColor | pix;
             }
             validPixels <<= 8;
             spriteBits[0] <<= 4;
@@ -772,17 +789,19 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
           while (validPixels)
           {
             /* output the sprite pixels 4 at a time */
-            if (validPixels & 0xf0000000)
+            if (validPixels >> 28)
             {
-              uint16_t color = ecmLookup[((spriteBits[0] & 0xf000) >> 12) |
-                                        ((spriteBits[1] & 0xf000) >> 8) |
-                                        ((spriteBits[2] & 0xf000) >> 4)];
+              uint16_t color = ecmLookup[(spriteBits[0] >> 12) |
+                                        ((spriteBits[1] >> 12) << 4) |
+                                        ((spriteBits[2] >> 12) << 8)];
 
-              uint16_t pix;
-              if (pix = color & 0x7) pixels[xPos] = spriteColor | pix;
-              if (pix = color & 0x70) pixels[xPos + 1] = spriteColor | (pix >> 4);
-              if (pix = color & 0x700) pixels[xPos + 2] = spriteColor | (pix >> 8);
-              if (pix = color & 0x7000) pixels[xPos + 3] = spriteColor | (pix >> 12);
+              uint8_t pix = color & 0x7;
+              if (pix) pixels[xPos] = spriteColor | pix;
+              if (pix = (color >>= 4) & 0x7) pixels[xPos + 1] = spriteColor | pix;
+              color >>= 4;
+              if (pix = (color >>= 4) & 0x7) pixels[xPos + 2] = spriteColor | pix;
+              color >>= 4;
+              if (pix = (color >>= 4) & 0x7) pixels[xPos + 3] = spriteColor | pix;
             }
             validPixels <<= 4;
             spriteBits[0] <<= 4;
@@ -796,7 +815,7 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
       {
         while (validPixels)
         {
-          if (validPixels & 0x80000000)
+          if (validPixels < 0)
           {
             pixels[xPos] = spriteColor;
           }
@@ -1415,7 +1434,7 @@ static uint8_t __time_critical_func(vrEmuTms9918GraphicsIScanLine)(VR_EMU_INST_A
 
   vrEmuTms9918BitmapLayerScanLine(VR_EMU_INST y, pixels, false);
 
-  if (!tilesDisabled) vrEmuF18AT1ScanLine(y, pixels);
+  //if (!tilesDisabled) vrEmuF18AT1ScanLine(y, pixels);
 
   if (tms9918->registers[0x31] & 0x80) vrEmuF18AT2ScanLine(y, pixels);
 
