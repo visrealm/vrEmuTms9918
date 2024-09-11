@@ -300,9 +300,9 @@ VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918Reset)(VR_EMU_INS
   tms9918->unlockCount = 0;
   tms9918->restart = 0;
   tmsMemset(tms9918->registers, 0, sizeof(tms9918->registers));
-  tms9918->registers [0x1e] = 32; // scanline sprites
+  tms9918->registers [0x1e] = MAX_SCANLINE_SPRITES; // scanline sprites
   tms9918->registers [0x30] = 1; // vram address increment register
-  tms9918->registers [0x33] = 32; // Sprites to process
+  tms9918->registers [0x33] = MAX_SPRITES; // Sprites to process
 
   // set up default palettes
   for (int i = 0; i < sizeof(defaultPalette) / sizeof(uint16_t); ++i)
@@ -608,7 +608,7 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
     if (++spritesShown > MAX_SCANLINE_SPRITES)
     {
       if (((tempStatus & STATUS_5S) == 0) && 
-          ((tms9918->registers[0x32] & 0x80) == 0 || spritesShown > tms9918->registers[0x1e]))
+          (tms9918->lockedMask == 0x07 || (tms9918->registers[0x32] & 0x80) == 0 || spritesShown > tms9918->registers[0x1e]))
       {
         tempStatus &= 0xe0;
         tempStatus |= STATUS_5S | spriteIdx;
@@ -962,6 +962,7 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
   /* iterate over each tile in this row */
   while (pixels < end)
   {
+    /* next page? */
     if (tileIndex == GRAPHICS_NUM_COLS)
     {
       if (tms9918->registers[0x1d] & 0x02)
@@ -974,6 +975,7 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
 
     const uint8_t pattIdx = tms9918->vram[rowNamesAddr + tileIndex];
 
+    /* was this pattern empty? we remember the last empty pattern */
     if (lastEmpty == pattIdx)
     {
       xPos += 8;
@@ -983,6 +985,7 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
     }
 
     uint16_t pattOffset = pattIdx * PATTERN_BYTES;
+    int count = 8 - startPattBit;
 
     if (ecm)
     {
@@ -994,7 +997,6 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
       const bool flipY = colorByte & 0x20;
       bool trans = colorByte & 0x10;
       bool copyLast = pattIdx == lastPattIdx;
-      int count = 8;
       uint8_t patternData[4] = {0};
 
       if (!copyLast)
@@ -1018,7 +1020,6 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
         if (startPattBit)
         {
           pattMask <<= startPattBit;
-          count -= startPattBit;
           for (int i = 0; i < ecm; ++i)
           {
             patternData[i] <<= startPattBit;
@@ -1093,7 +1094,7 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
         pal | tmsFgColor(tms9918, colorByte)
       };
 
-      for (uint8_t pattBit = startPattBit; (pattBit < GRAPHICS_CHAR_WIDTH) && (pixels < end); ++pattBit)
+      while (count--)
       {
         if ((pattByte < 0) || opaqBack)
           *pixels = bgFgColor[pattByte < 0];
@@ -1196,6 +1197,7 @@ static void __time_critical_func(vrEmuF18AT2ScanLine)(VR_EMU_INST_ARG uint8_t y,
     }
 
     uint16_t pattOffset = pattIdx * PATTERN_BYTES;
+    int count = 8 - startPattBit;
 
     if (ecm)
     {
@@ -1206,7 +1208,6 @@ static void __time_critical_func(vrEmuF18AT2ScanLine)(VR_EMU_INST_ARG uint8_t y,
       const bool flipY = colorByte & 0x20;
 
       bool copyLast = pattIdx == lastPattIdx;
-      int count = 8;
       uint8_t patternData[4] = {0};
 
       if (!copyLast)
@@ -1231,7 +1232,6 @@ static void __time_critical_func(vrEmuF18AT2ScanLine)(VR_EMU_INST_ARG uint8_t y,
         if (startPattBit)
         {
           pattMask <<= startPattBit;
-          count -= startPattBit;
           for (int i = 0; i < ecm; ++i)
           {
             patternData[i] <<= startPattBit;
@@ -1306,9 +1306,9 @@ static void __time_critical_func(vrEmuF18AT2ScanLine)(VR_EMU_INST_ARG uint8_t y,
         pal | tmsFgColor(tms9918, colorByte)
       };
 
-      for (uint8_t pattBit = startPattBit; (pattBit < GRAPHICS_CHAR_WIDTH) && (pixels < end); ++pattBit)
+      while (count--)
       {
-        if ((pattByte < 0) || opaqBack)
+        if (opaqBack || (pattByte < 0))
           *pixels = bgFgColor[pattByte < 0];
         ++pixels;
         pattByte <<= 1;
@@ -1585,6 +1585,7 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
     {
       tms9918->unlockCount = 0;
       tms9918->lockedMask = 0x3f;
+      tms9918->registers [0x1e] = MAX_SPRITES; // Sprites to process
     }
   } else {
     tms9918->unlockCount = 0;
@@ -1610,9 +1611,9 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
       tms9918->registers [0x05] = 0x0A;
       tms9918->registers [0x06] = 0x02;
       tms9918->registers [0x07] = 0xF2;
-      tms9918->registers [0x1e] = 32; // scanline sprites
+      tms9918->registers [0x1e] = MAX_SCANLINE_SPRITES; // scanline sprites
       tms9918->registers [0x30] = 1; // vram address increment register
-      tms9918->registers [0x33] = 32; // Sprites to process
+      tms9918->registers [0x33] = MAX_SPRITES; // Sprites to process
       tms9918->registers [0x36] = 0x40;
     } else
     
