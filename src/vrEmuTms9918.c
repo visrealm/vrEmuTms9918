@@ -454,7 +454,7 @@ __aligned(4) uint8_t doubledBitsNibble[16] = {
 
 
 /* lookup for combining ecm nibbles, returning 4 pixels */
-static uint16_t __aligned(4) ecmLookup[16 * 16 * 16];
+static uint32_t __aligned(4) ecmLookup[16 * 16 * 16];
 
 static uint8_t ecmByte(bool h, bool m, bool l)
 {
@@ -462,7 +462,7 @@ static uint8_t ecmByte(bool h, bool m, bool l)
 }
 
 /* lookup from bit planes: 333322221111 to merged palette values for four pixels
- * NOTE: The left-most pixel is stored in the least significant nibble of the result
+ * NOTE: The left-most pixel is stored in the least significant byte of the result
  *       because it's more efficient to offload them that way
  */
 static void ecmLookupInit()
@@ -470,9 +470,9 @@ static void ecmLookupInit()
   for (uint16_t i = 0; i < 16 * 16 * 16; ++i)
   {
     ecmLookup[i] = (ecmByte(i & 0x800, i & 0x080, i & 0x008)) |
-                   (ecmByte(i & 0x400, i & 0x040, i & 0x004) << 4) |
-                   (ecmByte(i & 0x200, i & 0x020, i & 0x002) << 8) |
-                   (ecmByte(i & 0x100, i & 0x010, i & 0x001) << 12);
+                   (ecmByte(i & 0x400, i & 0x040, i & 0x004) << 8) |
+                   (ecmByte(i & 0x200, i & 0x020, i & 0x002) << 16) |
+                   (ecmByte(i & 0x100, i & 0x010, i & 0x001) << 24);
   }
 }
 
@@ -514,9 +514,56 @@ static void reversedBitsInit()
   }
 }
 
-/* a lookup to apply a palette to 4 bytes of a uint32_t */
+/* a lookup to apply a 6-bit palette to 4 bytes of a uint32_t */
+static __aligned(4) uint32_t repeatedPalette[64];
+static void repeatedPaletteInit()
+{
+  for (int i = 0; i < 64; ++i)
+  {
+    repeatedPalette[i] = (i << 24) | (i << 16) | (i << 8) | i;
+  }
+}
 
-/* a lookup to map a byte to a 4x repeated byte (for memset) */
+/* a lookup from a 4-bit mask to a word of 8-bit masks */
+const static __aligned(4) uint32_t maskExpandNibbleToWord[] = {
+  0x00000000,
+  0x000000ff,
+  0x0000ff00,
+  0x0000ffff,
+  0x00ff0000,
+  0x00ff00ff,
+  0x00ffff00,
+  0x00ffffff,
+  0xff000000,
+  0xff0000ff,
+  0xff00ff00,
+  0xff00ffff,
+  0xffff0000,
+  0xffff00ff,
+  0xffffff00,
+  0xffffffff
+};
+
+/* a lookup from a 4-bit mask to a word of 8-bit masks (reversed byte order) */
+const static __aligned(4) uint32_t maskExpandNibbleToWordRev[] = {
+  0x00000000,
+  0xff000000,
+  0x00ff0000,
+  0xffff0000,
+  0x0000ff00,
+  0xff00ff00,
+  0x00ffff00,
+  0xffffff00,
+  0x000000ff,
+  0xff0000ff,
+  0x00ff00ff,
+  0xffff00ff,
+  0x0000ffff,
+  0xff00ffff,
+  0x00ffffff,
+  0xffffffff
+};
+
 
 
 bool lookupsReady = false;
@@ -527,6 +574,7 @@ void initLookups()
   ecmLookupInit();
   doubledBitsInit();
   reversedBitsInit();
+  repeatedPaletteInit();
   lookupsReady = true;
 }
 
@@ -971,16 +1019,42 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
   if (attrPerPos) colorTableAddr |= rowNamesAddr & 0xc00;
 
   uint8_t startPattBit = tms9918->registers[0x1B] & 0x07;
-  uint8_t tileIndex = tms9918->registers[0x1B] >> 3;
+  uint8_t tileIndex = (tms9918->registers[0x1B] >> 3) - 1;
   uint16_t lastEmpty = 0xffff;
   uint16_t lastPattIdx = 0xffff;
   uint8_t ecmColor;
   uint8_t pattMask;
   uint32_t lastColors;
 
-  /* iterate over each tile in this row */
-  while (pixels < end)
+  /* I want to render a word of pixels at a time.
+   * the spanner in the works is scrolling. so...
+   * I can create a 3-word buffer (and another 3-word mask) which
+   * contains a tile's pixels aligned to word boundaries 
+   * given 4x 8-bit pixels per word, it takes 2x words for an
+   * 8 pixel tile, the third being for any offset (up to 4 pixels)
+   * 
+   * will need lookups for:
+   *   bits-to-word-mask (nibble to word)
+   *   5-bit palette to a word of repeated palettes
+   * 
+   */
+//static __aligned(4) uint32_t repeatedPalette[64];
+//static __aligned(4) uint32_t maskExpandNibbleToWord[] = {
+
+  /* keep in mind when using this... the byte order will be reversed */
+  uint32_t *quadPixels = (uint32_t *)pixels;
+
+  // for the entire scanline, we need to shift our 4-pixel words by this much
+  uint32_t shift = (startPattBit & 0x03) << 3;
+  uint32_t reverseShift = 32 - shift;
+  bool firstTile = true;
+
+  /* iterate over each tile in this row - if' we're scrolling, add one */
+  uint32_t numTiles = GRAPHICS_NUM_COLS + (bool)startPattBit;
+  while (numTiles--)
   {
+    ++tileIndex;
+
     /* next page? */
     if (tileIndex == GRAPHICS_NUM_COLS)
     {
@@ -999,7 +1073,7 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
     {
       xPos += 8;
       pixels += 8;
-      ++tileIndex;
+      quadPixels += 2;
       continue;
     }
 
@@ -1015,8 +1089,10 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
       const bool flipX = colorByte & 0x40;
       const bool flipY = colorByte & 0x20;
       bool trans = colorByte & 0x10;
-      bool copyLast = pattIdx == lastPattIdx;
+      const bool copyLast = false;//pattIdx == lastPattIdx;
       uint8_t patternData[4] = {0};
+      uint32_t tileQuadPixels[3] = {0};
+      uint32_t tileQuadPixelMask[3] = {0};
 
       if (!copyLast)
       {
@@ -1034,25 +1110,12 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
         }
 
         if (!trans) pattMask = 0xff;
-        else if (pattMask == 0xff) trans = false;
-
-        if (startPattBit)
-        {
-          pattMask <<= startPattBit;
-          for (int i = 0; i < ecm; ++i)
-          {
-            patternData[i] <<= startPattBit;
-          }
-        }
-        else
-        {
-          lastPattIdx = pattIdx;
-        }
+        
+        //lastPattIdx = pattIdx;
       }
 
-      if (pattMask)
+      if (firstTile || pattMask)
       {
-        if (count > (end - pixels)) count = end - pixels;
         if (priority)
         {
           tmsTestCollisionMask(xPos, pattMask << 24, count);
@@ -1065,40 +1128,68 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
         }
         else
         {
-          colors = ecmLookup[(patternData[0] >> 4) |
+          tileQuadPixels[1] = ecmLookup[(patternData[0] >> 4) |
                              (patternData[1] & 0xf0) |
                              ((patternData[2] & 0xf0) << 4)];
 
-          colors |= ecmLookup[(patternData[0] & 0xf) |
+          tileQuadPixels[2] = ecmLookup[(patternData[0] & 0xf) |
                               ((patternData[1] & 0xf) << 4) |
-                              ((patternData[2] & 0xf) << 8)] << 16;
+                              ((patternData[2] & 0xf) << 8)];
           
           lastColors = colors;
         }
 
-        if (trans)
+        uint32_t palette = repeatedPalette[ecmColor];
+        if (startPattBit)
         {
-          while (count--)
+          uint32_t leftMask = maskExpandNibbleToWordRev[pattMask >> 4];
+          uint32_t rightMask = maskExpandNibbleToWordRev[pattMask & 0xf];
+          //tileQuadPixels[1] = tileQuadPixels[1];
+          //tileQuadPixels[2] = tileQuadPixels[2];
+
+          uint32_t mask;
+          uint32_t shifted;
+          if (!firstTile)
           {
-            uint8_t pixColor = (colors & 0x07);
-            if (pixColor) *pixels = ecmColor | pixColor;
-            colors >>= 4;
-            ++pixels;
+            mask = leftMask << reverseShift;
+            shifted = tileQuadPixels[1] << reverseShift;
+            *quadPixels = (*quadPixels & ~mask) | (mask & (shifted | palette));
+            ++quadPixels;
           }
+
+          if (!firstTile || (startPattBit <= 4))
+          {
+            mask = (leftMask >> shift) | (rightMask << reverseShift);
+            shifted = (tileQuadPixels[1] >> shift) | (tileQuadPixels[2] << reverseShift);
+            *quadPixels = (*quadPixels & ~mask) | (mask & (shifted | palette));
+            ++quadPixels;
+          }
+
+          if (!firstTile || (startPattBit > 4))
+          {
+            mask = (rightMask >> shift);
+            shifted = (tileQuadPixels[2] >> shift);
+            *quadPixels = (*quadPixels & ~mask) | (mask & (shifted | palette));
+          }
+
+          firstTile = false;
         }
         else
         {
-          while (count--)
-          {
-            *pixels = ecmColor | (colors & 0x07);
-            colors >>= 4;
-            ++pixels;
-          }
+          uint32_t mask = maskExpandNibbleToWordRev[pattMask >> 4];
+          *quadPixels = (*quadPixels & ~mask) | (mask & (tileQuadPixels[1] | palette));
+          ++quadPixels;
+          mask = maskExpandNibbleToWordRev[pattMask & 0xf];
+          *quadPixels = (*quadPixels & ~mask) | (mask & (tileQuadPixels[2] | palette));
+          ++quadPixels;
         }
+
+
       }
       else
       {
-        pixels += count;
+        quadPixels += 2;
+        //pixels += count;
         if (!startPattBit) lastEmpty = pattIdx;
       }
     }
@@ -1123,7 +1214,6 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
     }
     xPos += 8 - startPattBit;
     startPattBit = 0;
-    ++tileIndex;
   }
 }
 
