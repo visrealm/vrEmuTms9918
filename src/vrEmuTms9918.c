@@ -304,10 +304,10 @@ VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918Reset)(VR_EMU_INS
   tms9918->registers [0x30] = 1; // vram address increment register
   tms9918->registers [0x33] = MAX_SPRITES; // Sprites to process
 
-  // set up default palettes
+  // set up default palettes (arm is little-endian, tms9900 is big-endian)
   for (int i = 0; i < sizeof(defaultPalette) / sizeof(uint16_t); ++i)
   {
-    tms9918->pram[i] = defaultPalette[i];
+    tms9918->pram[i] = (defaultPalette[i] >> 8) | (defaultPalette[i] << 8);
   }
 
   /* ram intentionally left in unknown state */
@@ -1434,7 +1434,7 @@ static uint8_t __time_critical_func(vrEmuTms9918GraphicsIScanLine)(VR_EMU_INST_A
 
   vrEmuTms9918BitmapLayerScanLine(VR_EMU_INST y, pixels, false);
 
-  //if (!tilesDisabled) vrEmuF18AT1ScanLine(y, pixels);
+  if (!tilesDisabled) vrEmuF18AT1ScanLine(y, pixels);
 
   if (tms9918->registers[0x31] & 0x80) vrEmuF18AT2ScanLine(y, pixels);
 
