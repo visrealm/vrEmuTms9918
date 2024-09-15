@@ -431,9 +431,10 @@ static inline uint32_t tmsTestCollisionMask(VR_EMU_INST_ARG uint8_t xPos, uint32
 
   if ((rowSpriteBitsWordBit + spriteWidth) > 32)
   {
+    ++rowSpriteBitsWord;
     rowSpriteBitsWordBit = 32 - rowSpriteBitsWordBit;
-    uint32_t right = (~tms9918->rowSpriteBits[rowSpriteBitsWord + 1]) & (spritePixels << rowSpriteBitsWordBit);
-    tms9918->rowSpriteBits[rowSpriteBitsWord + 1] |= right;
+    uint32_t right = (~tms9918->rowSpriteBits[rowSpriteBitsWord]) & (spritePixels << rowSpriteBitsWordBit);
+    tms9918->rowSpriteBits[rowSpriteBitsWord] |= right;
     validPixels |= (right >> rowSpriteBitsWordBit);
   }
 
@@ -1041,7 +1042,7 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
   // for the entire scanline, we need to shift our 4-pixel words by this much
   uint32_t shift = (startPattBit & 0x03) << 3;
   uint32_t reverseShift = 32 - shift;
-  bool firstTile = true;
+  bool firstTile = startPattBit;
 
   /* iterate over each tile in this row - if' we're scrolling, add one */
   uint32_t numTiles = GRAPHICS_NUM_COLS + (bool)startPattBit;
@@ -1104,7 +1105,7 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
       {
         if (priority)
         {
-          tmsTestCollisionMask(xPos, pattMask << 24, count);
+          tmsTestCollisionMask(xPos, pattMask << (24 + startPattBit), count);
         }
 
         tileLeftPixels = ecmLookup[(patternData[0] >> 4) |
@@ -1116,7 +1117,7 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
                             ((patternData[2] & 0xf) << 8)];
 
         uint32_t palette = repeatedPalette[pal | ((colorByte & ecmColorMask) << ecmColorOffset)];
-        if (shift || startPattBit)
+        if (firstTile || shift)
         {
           uint32_t leftMask = maskExpandNibbleToWordRev[pattMask >> 4];
           uint32_t rightMask = maskExpandNibbleToWordRev[pattMask & 0xf];
@@ -1129,8 +1130,7 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
             {
               mask = (leftMask >> shift) | (rightMask << reverseShift);
               shifted = (tileLeftPixels >> shift) | (tileRightPixels << reverseShift);
-              *quadPixels = (*quadPixels & ~mask) | (mask & (shifted | palette));
-              ++quadPixels;
+              *quadPixels++ = (*quadPixels & ~mask) | (mask & (shifted | palette));
             }
 
             mask = (rightMask >> shift);
@@ -1141,13 +1141,11 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
           {
             mask = leftMask << reverseShift;
             shifted = tileLeftPixels << reverseShift;
-            *quadPixels = (*quadPixels & ~mask) | (mask & (shifted | palette));
-            ++quadPixels;
+            *quadPixels++ = (*quadPixels & ~mask) | (mask & (shifted | palette));
 
             mask = (leftMask >> shift) | (rightMask << reverseShift);
             shifted = (tileLeftPixels >> shift) | (tileRightPixels << reverseShift);
-            *quadPixels = (*quadPixels & ~mask) | (mask & (shifted | palette));
-            ++quadPixels;
+            *quadPixels++ = (*quadPixels & ~mask) | (mask & (shifted | palette));
 
             mask = (rightMask >> shift);
             shifted = (tileRightPixels >> shift);
@@ -1157,11 +1155,9 @@ static void __time_critical_func(vrEmuF18AT1ScanLine)(VR_EMU_INST_ARG uint8_t y,
         else
         {
           uint32_t mask = maskExpandNibbleToWordRev[pattMask >> 4];
-          *quadPixels = (*quadPixels & ~mask) | (mask & (tileLeftPixels | palette));
-          ++quadPixels;
+          *quadPixels++ = (*quadPixels & ~mask) | (mask & (tileLeftPixels | palette));
           mask = maskExpandNibbleToWordRev[pattMask & 0xf];
-          *quadPixels = (*quadPixels & ~mask) | (mask & (tileRightPixels | palette));
-          ++quadPixels;
+          *quadPixels++ = (*quadPixels & ~mask) | (mask & (tileRightPixels | palette));
         }
       }
       else
