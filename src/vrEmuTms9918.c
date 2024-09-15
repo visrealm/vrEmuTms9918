@@ -307,7 +307,7 @@ VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918Reset)(VR_EMU_INS
   // set up default palettes (arm is little-endian, tms9900 is big-endian)
   for (int i = 0; i < sizeof(defaultPalette) / sizeof(uint16_t); ++i)
   {
-    tms9918->pram[i] = (defaultPalette[i] >> 8) | (defaultPalette[i] << 8);
+    tms9918->pram[i] = __builtin_bswap16(defaultPalette[i]);
   }
 
   /* ram intentionally left in unknown state */
@@ -525,45 +525,18 @@ static void repeatedPaletteInit()
   }
 }
 
-/* a lookup from a 4-bit mask to a word of 8-bit masks */
-static uint32_t __aligned(8) maskExpandNibbleToWord[] = {
-  0x00000000,
-  0x000000ff,
-  0x0000ff00,
-  0x0000ffff,
-  0x00ff0000,
-  0x00ff00ff,
-  0x00ffff00,
-  0x00ffffff,
-  0xff000000,
-  0xff0000ff,
-  0xff00ff00,
-  0xff00ffff,
-  0xffff0000,
-  0xffff00ff,
-  0xffffff00,
-  0xffffffff
-};
-
 /* a lookup from a 4-bit mask to a word of 8-bit masks (reversed byte order) */
-static uint32_t __aligned(8) maskExpandNibbleToWordRev[] = {
-  0x00000000,
-  0xff000000,
-  0x00ff0000,
-  0xffff0000,
-  0x0000ff00,
-  0xff00ff00,
-  0x00ffff00,
-  0xffffff00,
-  0x000000ff,
-  0xff0000ff,
-  0x00ff00ff,
-  0xffff00ff,
-  0x0000ffff,
-  0xff00ffff,
-  0x00ffffff,
-  0xffffffff
-};
+static uint32_t __aligned(8) maskExpandNibbleToWordRev[16];
+static void maskExpandNibbleToWordRevInit()
+{
+  for (int i = 0; i < 16; ++i)
+  {
+    maskExpandNibbleToWordRev[i] = ((i & 0x1) ? (0xff << 24) : 0) |
+                                   ((i & 0x2) ? (0xff << 16): 0) |
+                                   ((i & 0x4) ? (0xff << 8): 0) |
+                                   ((i & 0x8) ? 0xff : 0);
+  }
+}
 
 
 
@@ -576,6 +549,7 @@ void initLookups()
   doubledBitsInit();
   reversedBitsInit();
   repeatedPaletteInit();
+  maskExpandNibbleToWordRevInit();
   lookupsReady = true;
 }
 
@@ -816,17 +790,17 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
             /* output the sprite pixels 4 at a time */
             if (validPixels >> 24)
             {
-              uint16_t color = ecmLookup[(spriteBits[0] >> 12) |
+              uint32_t color = ecmLookup[(spriteBits[0] >> 12) |
                                         ((spriteBits[1] >> 12) << 4) |
                                         ((spriteBits[2] >> 12) << 8)];
 
               uint8_t pix = color & 0x7;
               if (pix) pixels[xPos] = pixels[xPos + 1] = spriteColor | pix;
-              if (pix = (color >>= 4) & 0x7) pixels[xPos + 2] = pixels[xPos + 3] = spriteColor | pix;
-              if (pix = (color >>= 4) & 0x7) pixels[xPos + 4] = pixels[xPos + 5] = spriteColor | pix;
-              if (pix = (color >>= 4) & 0x7) pixels[xPos + 6] = pixels[xPos + 7] = spriteColor | pix;
+              if (pix = (color >>= 8) & 0x7) pixels[xPos + 2] = pixels[xPos + 3] = spriteColor | pix;
+              if (pix = (color >>= 8) & 0x7) pixels[xPos + 4] = pixels[xPos + 5] = spriteColor | pix;
+              if (pix = (color >>= 8) & 0x7) pixels[xPos + 6] = pixels[xPos + 7] = spriteColor | pix;
             }
-            validPixels <<= 8;
+            validPixels <<= 4;
             spriteBits[0] <<= 4;
             spriteBits[1] <<= 4;
             spriteBits[2] <<= 4;
@@ -840,17 +814,15 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
             /* output the sprite pixels 4 at a time */
             if (validPixels >> 28)
             {
-              uint16_t color = ecmLookup[(spriteBits[0] >> 12) |
+              uint32_t color = ecmLookup[(spriteBits[0] >> 12) |
                                         ((spriteBits[1] >> 12) << 4) |
                                         ((spriteBits[2] >> 12) << 8)];
 
               uint8_t pix = color & 0x7;
               if (pix) pixels[xPos] = spriteColor | pix;
-              if (pix = (color >>= 4) & 0x7) pixels[xPos + 1] = spriteColor | pix;
-              color >>= 4;
-              if (pix = (color >>= 4) & 0x7) pixels[xPos + 2] = spriteColor | pix;
-              color >>= 4;
-              if (pix = (color >>= 4) & 0x7) pixels[xPos + 3] = spriteColor | pix;
+              if (pix = (color >>= 8) & 0x7) pixels[xPos + 1] = spriteColor | pix;
+              if (pix = (color >>= 8) & 0x7) pixels[xPos + 2] = spriteColor | pix;
+              if (pix = (color >>= 8) & 0x7) pixels[xPos + 3] = spriteColor | pix;
             }
             validPixels <<= 4;
             spriteBits[0] <<= 4;
@@ -991,8 +963,8 @@ static void __time_critical_func(vrEmuF18ATileScanLine)(VR_EMU_INST_ARG uint8_t 
   uint32_t *quadPixels = (uint32_t*)__builtin_assume_aligned(pixels, 8);
 
   // for the entire scanline, we need to shift our 4-pixel words by this much
-  const uint32_t shift = (startPattBit & 0x03) << 3;
-  const uint32_t reverseShift = 32 - shift;
+  const register uint32_t shift = (startPattBit & 0x03) << 3;
+  const register uint32_t reverseShift = 32 - shift;
   bool firstTile = startPattBit;
 
   /* iterate over each tile in this row - if' we're scrolling, add one */
@@ -1036,7 +1008,7 @@ static void __time_critical_func(vrEmuF18ATileScanLine)(VR_EMU_INST_ARG uint8_t 
       const int priority = alwaysOnTop || (colorByte & 0x80);
       const int flipX = colorByte & 0x40;
       const int flipY = colorByte & 0x20;
-      const int trans = colorByte & 0x10;
+      int trans = colorByte & 0x10;
       uint32_t patternData[3] = {0};
       uint32_t tileLeftPixels = 0;
       uint32_t tileRightPixels = 0;
@@ -1103,14 +1075,7 @@ static void __time_critical_func(vrEmuF18ATileScanLine)(VR_EMU_INST_ARG uint8_t 
             {
               const uint32_t mask = (leftMask >> shift) | (rightMask << reverseShift);
               const uint32_t shifted = (tileLeftPixels >> shift) | (tileRightPixels << reverseShift);
-              if (trans)
-              {
-                *quadPixels++ = (*quadPixels & ~mask) | (mask & shifted);
-              }
-              else
-              {
-                *quadPixels++ = shifted;
-              }
+              *quadPixels++ = trans ? (*quadPixels & ~mask) | (mask & shifted) : shifted;
             }
 
             {
