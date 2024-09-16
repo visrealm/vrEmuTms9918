@@ -419,22 +419,49 @@ void __time_critical_func(vrEmuTms9918SetStatus)(VR_EMU_INST_ARG uint8_t status)
  * ----------------------------------------
  * Test and update the sprite collision mask.
  */
-static uint32_t tmsTestCollisionMask(VR_EMU_INST_ARG uint8_t xPos, uint32_t spritePixels, uint8_t spriteWidth)
+static inline uint32_t tmsTestCollisionMask(VR_EMU_INST_ARG uint8_t xPos, uint32_t spritePixels, uint8_t spriteWidth, bool update)
 {
-  int rowSpriteBitsWord = xPos >> 5;
-  int rowSpriteBitsWordBit = xPos & 0x1f;
+  if (!update && !tms9918->scanlineHasSprites) return spritePixels;
+
+  uint32_t rowSpriteBitsWord = xPos >> 5;
+  uint32_t rowSpriteBitsWordBit = xPos & 0x1f;
   
   uint32_t validPixels = (~tms9918->rowSpriteBits[rowSpriteBitsWord]) & (spritePixels >> rowSpriteBitsWordBit);
-  tms9918->rowSpriteBits[rowSpriteBitsWord] |= validPixels;
+  if (update) tms9918->rowSpriteBits[rowSpriteBitsWord] |= validPixels;
   validPixels <<= rowSpriteBitsWordBit;
 
   if ((rowSpriteBitsWordBit + spriteWidth) > 32)
   {
-    ++rowSpriteBitsWord;
     rowSpriteBitsWordBit = 32 - rowSpriteBitsWordBit;
-    uint32_t right = (~tms9918->rowSpriteBits[rowSpriteBitsWord]) & (spritePixels << rowSpriteBitsWordBit);
-    tms9918->rowSpriteBits[rowSpriteBitsWord] |= right;
+    uint32_t right = (~tms9918->rowSpriteBits[++rowSpriteBitsWord]) & (spritePixels << rowSpriteBitsWordBit);
+    if (update) tms9918->rowSpriteBits[rowSpriteBitsWord] |= right;
     validPixels |= (right >> rowSpriteBitsWordBit);
+  }
+
+  return validPixels;
+}
+
+
+/* Function:  tmsTestRowBitsMask
+ * ----------------------------------------
+ * Test and update the row pixels bit mask.
+ */
+static inline uint32_t tmsTestRowBitsMask(VR_EMU_INST_ARG uint8_t xPos, uint32_t tilePixels, uint32_t tileWidth, bool update)
+{
+  uint32_t rowBitsWord = xPos >> 5;
+  uint32_t rowBitsWordBit = xPos & 0x1f;
+  
+  uint32_t validPixels = (~tms9918->rowBits[rowBitsWord]) & (tilePixels >> rowBitsWordBit);
+  if (update) tms9918->rowBits[rowBitsWord] |= validPixels;
+  validPixels <<= rowBitsWordBit;
+
+  if ((rowBitsWordBit + tileWidth) > 32)
+  {
+    ++rowBitsWord;
+    rowBitsWordBit = 32 - rowBitsWordBit;
+    uint32_t right = (~tms9918->rowBits[rowBitsWord]) & (tilePixels << rowBitsWordBit);
+    if (update) tms9918->rowBits[rowBitsWord] |= right;
+    validPixels |= (right >> rowBitsWordBit);
   }
 
   return validPixels;
@@ -678,7 +705,7 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
      * left-aligned, so the first pixel in the sprite is the
      * MSB of spriteBits
      */
-    uint32_t pattMask = 0;
+    int32_t pattMask = 0;
     uint16_t spriteBits[4] = {0}; // a 16-bit value for each ecm bit plane
 
     /* load up the pattern data */
@@ -764,7 +791,8 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
     }
 
     /* test and update the collision mask - signed, because we test for msb using less-than */
-    int32_t validPixels = tmsTestCollisionMask(VR_EMU_INST xPos, pattMask, thisSpriteSizePx);
+    int32_t validPixels = tmsTestCollisionMask(VR_EMU_INST xPos, pattMask, thisSpriteSizePx, true);
+    tms9918->scanlineHasSprites = true;
 
     /* if the result is different, we collided */
     if (validPixels != pattMask)
@@ -939,7 +967,7 @@ static void __time_critical_func(vrEmuTms9918Text80ScanLine)(VR_EMU_INST_ARG uin
 static __attribute__((section(".scratch_y.lookup"))) uint32_t patternData[3] = {0};
 
 
-static void __time_critical_func(vrEmuF18ATileScanLine)(VR_EMU_INST_ARG uint8_t y, bool hpSize, uint16_t rowNamesAddr, uint16_t rowOffset, uint8_t tileIndex, uint8_t startPattBit, bool attrPerPos, uint8_t pal, bool alwaysOnTop, uint8_t pixels[TMS9918_PIXELS_X])
+static inline void __time_critical_func(vrEmuF18ATileScanLine)(VR_EMU_INST_ARG const uint8_t y, const bool hpSize, uint16_t rowNamesAddr, const uint16_t rowOffset, uint8_t tileIndex, uint8_t startPattBit, const bool attrPerPos, uint8_t pal, const bool alwaysOnTop, const bool isTile2, uint8_t pixels[TMS9918_PIXELS_X])
 {
   uint32_t xPos = 0;
   uint32_t lastEmpty = -1;
@@ -991,12 +1019,12 @@ static void __time_critical_func(vrEmuF18ATileScanLine)(VR_EMU_INST_ARG uint8_t 
     const uint32_t pattIdx = tms9918->vram[rowNamesAddr + tileIndex];
 
     /* was this pattern empty? we remember the last empty pattern */
-    /*if (lastEmpty == pattIdx)
+    if (lastEmpty == pattIdx || (!isTile2 && !tmsTestRowBitsMask(xPos, -1, 8, false)))
     {
       xPos += 8;
       quadPixels += 2;
       continue;
-    }*/
+    }
 
     uint32_t pattOffset = pattIdx * PATTERN_BYTES;
     uint32_t count = 8 - startPattBit;
@@ -1033,21 +1061,33 @@ static void __time_critical_func(vrEmuF18ATileScanLine)(VR_EMU_INST_ARG uint8_t 
 
       if (firstTile || pattMask)
       {
-        if (priority)
+        uint32_t offset = (24 + startPattBit);
+        pattMask <<= offset;
+        if (!priority)
         {
-          tmsTestCollisionMask(xPos, pattMask << (24 + startPattBit), count);
+          pattMask = tmsTestCollisionMask(xPos, pattMask, 8, false);
         }
+        pattMask = tmsTestRowBitsMask(xPos, pattMask, 8, true);
+
+        if (!firstTile && !pattMask)
+        {
+          xPos += 8;
+          quadPixels += 2;
+          continue;
+        }
+
+        pattMask >>= offset;
 
         uint32_t palette = pal | ((colorByte & ecmColorMask) << ecmColorOffset);
         palette |= palette << 16; palette |= palette << 8;
         const uint32_t tileLeftPixels = ecmLookup[leftIndex] | palette;
         const uint32_t tileRightPixels = ecmLookup[rightIndex] | palette;
 
-        const uint32_t leftMask = maskExpandNibbleToWordRev[pattMask >> 4];
-        const uint32_t rightMask = maskExpandNibbleToWordRev[pattMask & 0xf];
-
         if (firstTile)
         {
+          const uint32_t leftMask = maskExpandNibbleToWordRev[pattMask >> 4];
+          const uint32_t rightMask = maskExpandNibbleToWordRev[pattMask & 0xf];
+
           // first tile will either take one or two nibbles depending on the shift
           if (startPattBit < 4)
           {
@@ -1067,33 +1107,43 @@ static void __time_critical_func(vrEmuF18ATileScanLine)(VR_EMU_INST_ARG uint8_t 
         {
           // all subsequent shifted tiles will follow and require updating 3x nibbles
           // left, middle and right where the middle nibble is always complete
+          if (isTile2 && pattMask == 0xff)
           {
-            const uint32_t mask = leftMask << reverseShift;
+            const uint32_t mask = maskExpandNibbleToWordRev[pattMask >> 4] << reverseShift;
             const uint32_t shifted = mask & (tileLeftPixels << reverseShift);
             *quadPixels++ = (*quadPixels & ~mask) | shifted;
-          }
 
+            *quadPixels++ = (tileLeftPixels >> shift) | (tileRightPixels << reverseShift);
+            *quadPixels = tileRightPixels >> shift;
+          }
+          else
           {
-            const uint32_t shifted = (tileLeftPixels >> shift) | (tileRightPixels << reverseShift);
-            if (trans)
+            const uint32_t leftMask = maskExpandNibbleToWordRev[pattMask >> 4];
+            const uint32_t rightMask = maskExpandNibbleToWordRev[pattMask & 0xf];
             {
+              const uint32_t mask = leftMask << reverseShift;
+              const uint32_t shifted = mask & (tileLeftPixels << reverseShift);
+              *quadPixels++ = (*quadPixels & ~mask) | shifted;
+            }
+
+            {
+              const uint32_t shifted = (tileLeftPixels >> shift) | (tileRightPixels << reverseShift);
               const uint32_t mask = (leftMask >> shift) | (rightMask << reverseShift);
               *quadPixels++ = (*quadPixels & ~mask) | (mask & shifted);
             }
-            else
+
             {
-              *quadPixels++ = shifted;
+              const uint32_t mask = (rightMask >> shift);
+              const uint32_t shifted = mask & (tileRightPixels >> shift);
+              *quadPixels = (*quadPixels & ~mask) | shifted;
             }
           }
-
-          {
-            const uint32_t mask = (rightMask >> shift);
-            const uint32_t shifted = mask & (tileRightPixels >> shift);
-            *quadPixels = (*quadPixels & ~mask) | shifted;
-          }
         }
-        else if (trans)
+        else if (pattMask != 0xff)
         {
+          const uint32_t leftMask = maskExpandNibbleToWordRev[pattMask >> 4];
+          const uint32_t rightMask = maskExpandNibbleToWordRev[pattMask & 0xf];
+
           // not shifted, but transparent - need to mask the two nibbles
           *quadPixels++ = (*quadPixels & ~leftMask) | (leftMask & tileLeftPixels);
           *quadPixels++ = (*quadPixels & ~rightMask) | (rightMask & tileRightPixels);
@@ -1167,7 +1217,7 @@ static void __time_critical_func(vrEmuF18ATile1ScanLine)(VR_EMU_INST_ARG uint8_t
   uint8_t tileIndex = (tms9918->registers[0x1b] >> 3) - 1;
   bool hpSize = tms9918->registers[0x1d] & 0x02;
 
-  vrEmuF18ATileScanLine(VR_EMU_INST y, hpSize, rowNamesAddr, rowOffset, tileIndex, startPattBit, attrPerPos, pal, false, pixels);
+  vrEmuF18ATileScanLine(VR_EMU_INST y, hpSize, rowNamesAddr, rowOffset, tileIndex, startPattBit, attrPerPos, pal, false, 0, pixels);
 }
 
 
@@ -1210,7 +1260,7 @@ static void __time_critical_func(vrEmuF18ATile2ScanLine)(VR_EMU_INST_ARG uint8_t
   uint8_t tileIndex = (tms9918->registers[0x19] >> 3) - 1;
   bool hpSize = tms9918->registers[0x1d] & 0x20;
 
-  vrEmuF18ATileScanLine(VR_EMU_INST y, hpSize, rowNamesAddr, rowOffset, tileIndex, startPattBit, attrPerPos, pal, tile2Priority, pixels);
+  vrEmuF18ATileScanLine(VR_EMU_INST y, hpSize, rowNamesAddr, rowOffset, tileIndex, startPattBit, attrPerPos, pal, tile2Priority, 1, pixels);
 }
 
 
@@ -1306,15 +1356,15 @@ static uint8_t __time_critical_func(vrEmuTms9918GraphicsIScanLine)(VR_EMU_INST_A
 {
   const bool tilesDisabled = tms9918->registers[0x32] & 0x10;
 
-  vrEmuTms9918BitmapLayerScanLine(VR_EMU_INST y, pixels, false);
-
-  if (!tilesDisabled) vrEmuF18ATile1ScanLine(y, pixels);
-
-  if (tms9918->registers[0x31] & 0x80) vrEmuF18ATile2ScanLine(y, pixels);
+  uint8_t tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
 
   vrEmuTms9918BitmapLayerScanLine(VR_EMU_INST y, pixels, true);
 
-  uint8_t tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
+  if (tms9918->registers[0x31] & 0x80) vrEmuF18ATile2ScanLine(y, pixels);
+
+  if (!tilesDisabled) vrEmuF18ATile1ScanLine(y, pixels);
+
+  vrEmuTms9918BitmapLayerScanLine(VR_EMU_INST y, pixels, false);
 
   return tempStatus;
 }
@@ -1415,7 +1465,7 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ScanLine)(VR_E
   /* if the display is inactive OR we have a low priority bitmap layer, we need to clear the buffer */
   //if (!dispActive || ((tms9918->registers[0x1f] & 0xc0) == 0x80))
   {
-    tmsMemset(pixels, tmsMainBgColor(tms9918), TMS9918_PIXELS_X);
+    tmsMemset(pixels, 0/*tmsMainBgColor(tms9918)*/, TMS9918_PIXELS_X);
   }
 
   if (dispActive)
@@ -1424,7 +1474,9 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ScanLine)(VR_E
     for (int i = 0; i < TMS9918_PIXELS_X / 32; ++i)
     {
       tms9918->rowSpriteBits[i] = 0;
+      tms9918->rowBits[i] = 0;
     }
+    tms9918->scanlineHasSprites = false;
 
     switch (tmsMode(tms9918))
     {
