@@ -100,8 +100,6 @@ struct vrEmuTMS9918_s
   uint64_t stopTime;
   uint64_t currentTime;
 
-  uint32_t rowSpriteBits[TMS9918_PIXELS_X / 32]; /* collision mask */
-  uint32_t rowBits[TMS9918_PIXELS_X / 32];       /* pixel mask */
   bool scanlineHasSprites;
 };
 
