@@ -969,45 +969,6 @@ static void __time_critical_func(vrEmuTms9918Text80ScanLine)(VR_EMU_INST_ARG uin
 
 static __attribute__((section(".scratch_y.lookup"))) uint32_t patternData[3] = {0};
 
-typedef struct 
-{
-  uint8_t colorByte;
-  uint8_t priority;
-  uint8_t flipX;
-  uint8_t flipY;
-  uint8_t trans;
-  uint32_t tileLeftPixels;
-  uint32_t tileRightPixels;
-} TileDetails;
-
-
-static inline uint32_t renderStartTile(
-  uint32_t *quadPixels,
-  uint32_t tileLeftPixels,
-  uint32_t tileRightPixels,
-  uint32_t pattMask,
-  uint32_t startPattBit,
-  uint32_t shift,
-  uint32_t reverseShift)
-{
-  const uint32_t rightMask = maskExpandNibbleToWordRev[pattMask & 0xf];
-
-  // first tile will either take one or two nibbles depending on the shift
-  if (startPattBit < 4)
-  {
-    const uint32_t leftMask = maskExpandNibbleToWordRev[pattMask >> 4];
-    const uint32_t mask = (leftMask >> shift) | (rightMask << reverseShift);
-    const uint32_t shifted = mask & ((tileLeftPixels >> shift) | (tileRightPixels << reverseShift));
-    *quadPixels++ = (*quadPixels & ~mask) | shifted;
-  }
-
-  const uint32_t mask = (rightMask >> shift);
-  const uint32_t shifted = mask & (tileRightPixels >> shift);
-  *quadPixels = (*quadPixels & ~mask) | shifted;
-
-  if (startPattBit == 4) ++quadPixels;
-}
-
 
 static inline uint32_t* renderEcmStartTile(
   uint32_t *quadPixels,
@@ -1043,7 +1004,6 @@ static inline uint32_t* rederEcmShiftedTile(
   const uint32_t tileLeftPixels,
   const uint32_t tileRightPixels,
   const uint32_t pattMask,
-  const uint32_t startPattBit,
   const uint32_t shift,
   const uint32_t reverseShift,
   const bool isTile2) 
@@ -1097,6 +1057,12 @@ static inline uint32_t* renderEcmAlignedTile(uint32_t *quadPixels, const uint32_
   return quadPixels;
 }
 
+static inline uint32_t quadPixelIncrement(uint32_t startPattBit)
+{
+  if (!startPattBit) return 2;
+  return startPattBit <= 4;
+}
+
 static inline uint32_t* renderEcmTile(
   uint32_t *quadPixels,
   const uint32_t xPos,
@@ -1116,14 +1082,13 @@ static inline uint32_t* renderEcmTile(
   const uint32_t shift,
   const uint32_t reverseShift,
   uint32_t *lastEmpty,
-  const bool firstTile,
   const bool isTile2,
   const bool alwaysOnTop)
 {
   /* was this pattern empty? we remember the last empty pattern */
-  if (*lastEmpty == pattIdx || (!isTile2 && !tmsTestRowBitsMask(xPos, -1, 8, false)))
+  if (*lastEmpty == pattIdx || (!isTile2 && !tmsTestRowBitsMask(xPos, -1, 8 - startPattBit, false)))
   {
-    return quadPixels + 2;
+    return quadPixels + quadPixelIncrement(startPattBit);
   }
 
   /* iterate over each bit of this pattern byte */
@@ -1136,12 +1101,13 @@ static inline uint32_t* renderEcmTile(
   const uint32_t flipX = colorByte & 0x40;
   const uint32_t flipY = colorByte & 0x20;
   const uint32_t trans = colorByte & 0x10;
-  uint32_t leftIndex = 0, rightIndex = 0;
 
   uint32_t pattOffset = pattIdx * PATTERN_BYTES;
   pattOffset += flipY ? 7 - pattRow : pattRow;
 
   uint32_t pattMask = trans ? 0 : 0xff;
+  uint32_t leftIndex = 0, rightIndex = 0;
+
   for (int j = 0; j < (ecm * 4); j += 4)
   {
     uint32_t patt = patternTable[pattOffset];
@@ -1155,7 +1121,7 @@ static inline uint32_t* renderEcmTile(
     pattOffset += ecmOffset;
   }
 
-  if (firstTile || pattMask)
+  if (pattMask)
   {
     uint32_t offset = (24 + startPattBit);
     pattMask <<= offset;
@@ -1165,9 +1131,9 @@ static inline uint32_t* renderEcmTile(
     }
     pattMask = tmsTestRowBitsMask(xPos, pattMask, 8, true);
 
-    if (!firstTile && !pattMask)
+    if (!pattMask)
     {
-      return quadPixels + 2;
+      return quadPixels + quadPixelIncrement(startPattBit);
     }
 
     pattMask >>= offset;
@@ -1176,13 +1142,13 @@ static inline uint32_t* renderEcmTile(
     const uint32_t tileLeftPixels = ecmLookup[leftIndex] | palette;
     const uint32_t tileRightPixels = ecmLookup[rightIndex] | palette;
 
-    if (firstTile && startPattBit)
+    if (startPattBit)
     {
       quadPixels = renderEcmStartTile(quadPixels, tileLeftPixels, tileRightPixels, pattMask, startPattBit, shift, reverseShift);
     }
     else if (shift)
     {
-      quadPixels = rederEcmShiftedTile(quadPixels, tileLeftPixels, tileRightPixels, pattMask, startPattBit, shift, reverseShift, isTile2);
+      quadPixels = rederEcmShiftedTile(quadPixels, tileLeftPixels, tileRightPixels, pattMask, shift, reverseShift, isTile2);
     }
     else if (pattMask != 0xff)
     {
@@ -1197,7 +1163,7 @@ static inline uint32_t* renderEcmTile(
   }
   else
   {
-    quadPixels += 2;
+    quadPixels += quadPixelIncrement(startPattBit);
     *lastEmpty = pattIdx;
   }
   return quadPixels;
@@ -1265,7 +1231,6 @@ static inline void __time_critical_func(vrEmuF18ATileScanLine)(VR_EMU_INST_ARG c
   // for the entire scanline, we need to shift our 4-pixel words by this much
   const uint32_t shift = (startPattBit & 0x03) << 3;
   const uint32_t reverseShift = 32 - shift;
-  uint32_t firstTile = startPattBit;
   uint32_t lastPattId = -1;
 
   /* iterate over each tile in this row - if' we're scrolling, add one */
@@ -1279,9 +1244,8 @@ static inline void __time_critical_func(vrEmuF18ATileScanLine)(VR_EMU_INST_ARG c
     if (startPattBit)
     {
       const uint32_t pattIdx = tms9918->vram[rowNamesAddr + tileIndex];
-      quadPixels = renderEcmTile(quadPixels, xPos, pattIdx, patternTable,colorTableAddr,startPattBit,ecm,ecmOffset,ecmColorMask,ecmColorOffset,pal,attrPerPos,rowOffset,pattRow,tileIndex,shift,reverseShift,&lastEmpty,true,isTile2,alwaysOnTop);
+      quadPixels = renderEcmTile(quadPixels, xPos, pattIdx, patternTable,colorTableAddr,startPattBit,ecm,ecmOffset,ecmColorMask,ecmColorOffset,pal,attrPerPos,rowOffset,pattRow,tileIndex++,shift,reverseShift,&lastEmpty,isTile2,alwaysOnTop);
       xPos += 8 - startPattBit;
-      ++tileIndex;
     }
 
     while (numTiles--)
@@ -1297,9 +1261,8 @@ static inline void __time_critical_func(vrEmuF18ATileScanLine)(VR_EMU_INST_ARG c
         tileIndex = 0;
       }
       const uint32_t pattIdx = tms9918->vram[rowNamesAddr + tileIndex];
-      quadPixels = renderEcmTile(quadPixels, xPos, pattIdx, patternTable,colorTableAddr,0,ecm,ecmOffset,ecmColorMask,ecmColorOffset,pal,attrPerPos,rowOffset,pattRow,tileIndex,shift,reverseShift,&lastEmpty,false,isTile2,alwaysOnTop);
+      quadPixels = renderEcmTile(quadPixels, xPos, pattIdx, patternTable,colorTableAddr,0,ecm,ecmOffset,ecmColorMask,ecmColorOffset,pal,attrPerPos,rowOffset,pattRow,tileIndex++,shift,reverseShift,&lastEmpty,isTile2,alwaysOnTop);
       xPos += 8;
-      ++tileIndex;
     }
   }
   else
@@ -1598,7 +1561,7 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ScanLine)(VR_E
   /* if the display is inactive OR we have a low priority bitmap layer, we need to clear the buffer */
   //if (!dispActive || ((tms9918->registers[0x1f] & 0xc0) == 0x80))
   {
-    tmsMemset(pixels, 0/*tmsMainBgColor(tms9918)*/, TMS9918_PIXELS_X);
+    tmsMemset(pixels, tmsMainBgColor(tms9918), TMS9918_PIXELS_X);
   }
 
   if (dispActive)
