@@ -593,9 +593,8 @@ typedef union {
  * ----------------------------------------
  * Output Sprites to a scanline
  */
-static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
+static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_t y, const bool spriteMag, uint8_t pixels[TMS9918_PIXELS_X])
 {
-  const bool spriteMag = tmsSpriteMag(tms9918);
   const uint8_t spriteSize = tmsSpriteSize(tms9918);
   const bool sprite16 = spriteSize == 16;
   const uint8_t spriteIdxMask = sprite16 ? 0xfc : 0xff;
@@ -880,6 +879,19 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
   }
 
   return tempStatus;
+}
+
+static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
+{
+  const bool spriteMag = tmsSpriteMag(tms9918);
+  if (spriteMag)
+  {
+    return renderSprites(VR_EMU_INST y, true, pixels);
+  }
+  else
+  {
+    return renderSprites(VR_EMU_INST y, false, pixels);
+  }
 }
 
 /* Function:  vrEmuTms9918TextScanLine
