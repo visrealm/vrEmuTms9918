@@ -1204,16 +1204,16 @@ static inline uint32_t* renderEcmTile(
     {
       quadPixels = rederEcmShiftedTile(quadPixels, tileLeftPixels, tileRightPixels, pattMask, shift, reverseShift, isTile2);
     }
-    else// if (pattMask != 0xff)
+    else if (pattMask != 0xff)
     {
       quadPixels = renderEcmAlignedTile(quadPixels, tileLeftPixels, tileRightPixels, pattMask);
     }
-    /*else
+    else
     {
       // not shifted, not transparent, just dump it out
       *quadPixels++ = tileLeftPixels;
       *quadPixels++ = tileRightPixels;
-    }*/
+    }
   }
   else
   {
