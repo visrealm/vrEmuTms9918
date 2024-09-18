@@ -869,8 +869,8 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
 
           while (validPixels)
           {
-            /* output the sprite pixels 4 at a time */
-            uint8_t chunkMask = validPixels >> 28;
+            /* output the sprite 4 pixels at a time */
+            uint32_t chunkMask = validPixels >> 28;
             if (chunkMask)
             {
               uint32_t color = ecmLookup[(spriteBits[0] >> 28) |
@@ -1049,36 +1049,24 @@ static inline uint32_t* rederEcmShiftedTile(
 {
   // all subsequent shifted tiles will follow and require updating 3x nibbles
   // left, middle and right where the middle nibble is always complete
-  if (isTile2 && pattMask == 0xff) // TODO: do we need this branch...?
+  const uint32_t leftMask = maskExpandNibbleToWordRev[pattMask >> 4];
   {
-    const uint32_t mask = maskExpandNibbleToWordRev[pattMask >> 4] << reverseShift;
+    const uint32_t mask = leftMask << reverseShift;
     const uint32_t shifted = mask & (tileLeftPixels << reverseShift);
     *quadPixels++ = (*quadPixels & ~mask) | shifted;
-
-    *quadPixels++ = (tileLeftPixels >> shift) | (tileRightPixels << reverseShift);
-    *quadPixels = tileRightPixels >> shift;
   }
-  else
+
+  const uint32_t rightMask = maskExpandNibbleToWordRev[pattMask & 0xf];
   {
-    const uint32_t leftMask = maskExpandNibbleToWordRev[pattMask >> 4];
-    {
-      const uint32_t mask = leftMask << reverseShift;
-      const uint32_t shifted = mask & (tileLeftPixels << reverseShift);
-      *quadPixels++ = (*quadPixels & ~mask) | shifted;
-    }
+    const uint32_t shifted = (tileLeftPixels >> shift) | (tileRightPixels << reverseShift);
+    const uint32_t mask = (leftMask >> shift) | (rightMask << reverseShift);
+    *quadPixels++ = (*quadPixels & ~mask) | (mask & shifted);
+  }
 
-    const uint32_t rightMask = maskExpandNibbleToWordRev[pattMask & 0xf];
-    {
-      const uint32_t shifted = (tileLeftPixels >> shift) | (tileRightPixels << reverseShift);
-      const uint32_t mask = (leftMask >> shift) | (rightMask << reverseShift);
-      *quadPixels++ = (*quadPixels & ~mask) | (mask & shifted);
-    }
-
-    {
-      const uint32_t mask = (rightMask >> shift);
-      const uint32_t shifted = mask & (tileRightPixels >> shift);
-      *quadPixels = (*quadPixels & ~mask) | shifted;
-    }
+  {
+    const uint32_t mask = (rightMask >> shift);
+    const uint32_t shifted = mask & (tileRightPixels >> shift);
+    *quadPixels = (*quadPixels & ~mask) | shifted;
   }
   
   return quadPixels;
