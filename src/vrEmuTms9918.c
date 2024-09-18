@@ -811,7 +811,7 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
     }
 
     /* test and update the collision mask - signed, because we test for msb using less-than */
-    int32_t validPixels = tmsTestCollisionMask(VR_EMU_INST xPos, pattMask, thisSpriteSizePx, true);
+    uint32_t validPixels = tmsTestCollisionMask(VR_EMU_INST xPos, pattMask, thisSpriteSizePx, true);
     tms9918->scanlineHasSprites = true;
 
     /* if the result is different, we collided */
@@ -856,15 +856,16 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
         }
         else
         {
-          uint32_t *quadPixels = (uint32_t*)pixels;
-
           // get him to be word aligned so we can smash out 4 pixels at a time
           uint32_t quadOffset = xPos >> 2;
-          uint32_t pixOffset = xPos & 0x3;
+          const uint32_t pixOffset = xPos & 0x3;
           spriteBits[0] >>= pixOffset;
           spriteBits[1] >>= pixOffset;
           spriteBits[2] >>= pixOffset;
           validPixels >>= pixOffset;
+
+          uint32_t *quadPixels = (uint32_t*)pixels;
+          uint32_t quadPal = repeatedPalette[spriteColor];
 
           while (validPixels)
           {
@@ -874,19 +875,16 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
             {
               uint32_t color = ecmLookup[(spriteBits[0] >> 28) |
                                         ((spriteBits[1] >> 28) << 4) |
-                                        ((spriteBits[2] >> 28) << 8)];
+                                        ((spriteBits[2] >> 28) << 8)] | quadPal;
+              uint32_t maskQuad = maskExpandNibbleToWordRev[chunkMask];
 
-              uint8_t pix = color & 0x7;
-              if (pix) pixels[xPos] = spriteColor | pix;
-              if (pix = (color >> 8) & 0x7) pixels[xPos + 1] = spriteColor | pix;
-              if (pix = (color >> 16) & 0x7) pixels[xPos + 2] = spriteColor | pix;
-              if (pix = (color >> 24) & 0x7) pixels[xPos + 3] = spriteColor | pix;
+              quadPixels[quadOffset] = (quadPixels[quadOffset] & ~maskQuad) | (color & maskQuad);
             }
+            ++quadOffset;
             validPixels <<= 4;
             spriteBits[0] <<= 4;
             spriteBits[1] <<= 4;
             spriteBits[2] <<= 4;
-            xPos += 4;
           }
         }
       }
@@ -894,7 +892,7 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
       {
         while (validPixels)
         {
-          if (validPixels < 0)
+          if ((int32_t)validPixels < 0)
           {
             pixels[xPos] = spriteColor;
           }
