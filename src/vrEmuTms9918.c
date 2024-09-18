@@ -707,9 +707,7 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
       continue;
     }
 
-    const bool flipY = spriteAttr[SPRITE_ATTR_COLOR] & 0x20;
-    const bool flipX = spriteAttr[SPRITE_ATTR_COLOR] & 0x40;
-    if (flipY) pattRow = thisSpriteSize - pattRow;
+    if (spriteAttr[SPRITE_ATTR_COLOR] & 0x20) pattRow = thisSpriteSize - pattRow; // flip Y?
 
     /* sprite is visible on this line */
     uint8_t spriteColor = (spriteAttr[SPRITE_ATTR_COLOR] & ecmColorMask) << ecmColorOffset;
@@ -721,11 +719,11 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
      * left-aligned, so the first pixel in the sprite is the
      * MSB of spriteBits
      */
-    int32_t pattMask = 0;
-    uint16_t spriteBits[4] = {0}; // a 16-bit value for each ecm bit plane
+    uint32_t pattMask = 0;
+    uint32_t spriteBits[4] = {0}; // a 16-bit value for each ecm bit plane
 
     /* load up the pattern data */
-    if (flipX)
+    if (spriteAttr[SPRITE_ATTR_COLOR] & 0x40) // flip X?
     {
       /* Note: I've made the choice to branch early for some of the sprite options
               to improve performance for each case (reduce branches in loops) */
@@ -734,8 +732,8 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
         int i = 0;
         do
         {
-          spriteBits[i] = reversedBits[tms9918->vram[pattOffset]];
-          spriteBits[i] |= reversedBits[tms9918->vram[(pattOffset + PATTERN_BYTES * 2)]] << 8;
+          spriteBits[i] = reversedBits[tms9918->vram[pattOffset]] << 16;
+          spriteBits[i] |= reversedBits[tms9918->vram[(pattOffset + PATTERN_BYTES * 2)]] << 24;
           pattOffset += ecmOffset;
           pattMask |= spriteBits[i];
         } while (++i < ecm);
@@ -745,7 +743,7 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
         int i = 0;
         do
         {
-          spriteBits[i] = reversedBits[tms9918->vram[pattOffset]] << 8;
+          spriteBits[i] = reversedBits[tms9918->vram[pattOffset]] << 24;
           pattOffset += ecmOffset;
           pattMask |= spriteBits[i];
         } while (++i < ecm);
@@ -756,8 +754,8 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
       int i = 0;
       do
       {
-        spriteBits[i] = tms9918->vram[pattOffset] << 8;
-        spriteBits[i] |= tms9918->vram[(pattOffset + PATTERN_BYTES * 2)];
+        spriteBits[i] = tms9918->vram[pattOffset] << 24;
+        spriteBits[i] |= tms9918->vram[(pattOffset + PATTERN_BYTES * 2)] << 16;
         pattOffset += ecmOffset;
         pattMask |= spriteBits[i];
       } while (++i < ecm);
@@ -767,7 +765,7 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
       int i = 0;
       do
       {
-        spriteBits[i] = tms9918->vram[pattOffset] << 8;
+        spriteBits[i] = tms9918->vram[pattOffset] << 24;
         pattOffset += ecmOffset;
         pattMask |= spriteBits[i];
       } while (++i < ecm);
@@ -782,11 +780,7 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
 
     if (spriteMag)
     {
-      pattMask = (doubledBits[pattMask >> 8] << 16) | doubledBits[pattMask & 0xff];
-    }
-    else
-    {
-      pattMask <<= 16;
+      pattMask = (doubledBits[pattMask >> 24] << 16) | doubledBits[(pattMask >> 16) & 0xff];
     }
 
     /* perform clipping operations */
@@ -843,15 +837,15 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
             /* output the sprite pixels 4 at a time */
             if (validPixels >> 24)
             {
-              uint32_t color = ecmLookup[(spriteBits[0] >> 12) |
-                                        ((spriteBits[1] >> 12) << 4) |
-                                        ((spriteBits[2] >> 12) << 8)];
+              uint32_t color = ecmLookup[(spriteBits[0] >> 28) |
+                                        ((spriteBits[1] >> 28) << 4) |
+                                        ((spriteBits[2] >> 28) << 8)];
 
               uint8_t pix = color & 0x7;
               if (pix) pixels[xPos] = pixels[xPos + 1] = spriteColor | pix;
-              if (pix = (color >>= 8) & 0x7) pixels[xPos + 2] = pixels[xPos + 3] = spriteColor | pix;
-              if (pix = (color >>= 8) & 0x7) pixels[xPos + 4] = pixels[xPos + 5] = spriteColor | pix;
-              if (pix = (color >>= 8) & 0x7) pixels[xPos + 6] = pixels[xPos + 7] = spriteColor | pix;
+              if (pix = (color >> 8) & 0x7) pixels[xPos + 2] = pixels[xPos + 3] = spriteColor | pix;
+              if (pix = (color >> 16) & 0x7) pixels[xPos + 4] = pixels[xPos + 5] = spriteColor | pix;
+              if (pix = (color >> 24) & 0x7) pixels[xPos + 6] = pixels[xPos + 7] = spriteColor | pix;
             }
             validPixels <<= 4;
             spriteBits[0] <<= 4;
@@ -862,21 +856,31 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
         }
         else
         {
+          uint32_t *quadPixels = (uint32_t*)pixels;
+
+          // get him to be word aligned so we can smash out 4 pixels at a time
+          uint32_t quadOffset = xPos >> 2;
+          uint32_t pixOffset = xPos & 0x3;
+          spriteBits[0] >>= pixOffset;
+          spriteBits[1] >>= pixOffset;
+          spriteBits[2] >>= pixOffset;
+          validPixels >>= pixOffset;
+
           while (validPixels)
           {
             /* output the sprite pixels 4 at a time */
             uint8_t chunkMask = validPixels >> 28;
             if (chunkMask)
             {
-              uint32_t color = ecmLookup[(spriteBits[0] >> 12) |
-                                        ((spriteBits[1] >> 12) << 4) |
-                                        ((spriteBits[2] >> 12) << 8)];
+              uint32_t color = ecmLookup[(spriteBits[0] >> 28) |
+                                        ((spriteBits[1] >> 28) << 4) |
+                                        ((spriteBits[2] >> 28) << 8)];
 
               uint8_t pix = color & 0x7;
               if (pix) pixels[xPos] = spriteColor | pix;
-              if (pix = (color >>= 8) & 0x7) pixels[xPos + 1] = spriteColor | pix;
-              if (pix = (color >>= 8) & 0x7) pixels[xPos + 2] = spriteColor | pix;
-              if (pix = (color >>= 8) & 0x7) pixels[xPos + 3] = spriteColor | pix;
+              if (pix = (color >> 8) & 0x7) pixels[xPos + 1] = spriteColor | pix;
+              if (pix = (color >> 16) & 0x7) pixels[xPos + 2] = spriteColor | pix;
+              if (pix = (color >> 24) & 0x7) pixels[xPos + 3] = spriteColor | pix;
             }
             validPixels <<= 4;
             spriteBits[0] <<= 4;
@@ -1047,7 +1051,7 @@ static inline uint32_t* rederEcmShiftedTile(
 {
   // all subsequent shifted tiles will follow and require updating 3x nibbles
   // left, middle and right where the middle nibble is always complete
-  if (false && isTile2 && pattMask == 0xff) // TODO: temporarily disabled thi sbranch... do we really need it?
+  if (isTile2 && pattMask == 0xff) // TODO: do we need this branch...?
   {
     const uint32_t mask = maskExpandNibbleToWordRev[pattMask >> 4] << reverseShift;
     const uint32_t shifted = mask & (tileLeftPixels << reverseShift);
