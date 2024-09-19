@@ -663,19 +663,23 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
     int16_t yPos = spriteAttr[SPRITE_ATTR_Y];
 
     /* stop processing when yPos == LAST_SPRITE_YPOS */
-    if (yPos == LAST_SPRITE_YPOS)
+    if (!tms9918->isUnlocked)
     {
-      break;
-    }
+      if (yPos == LAST_SPRITE_YPOS)
+      {
+        break;
+      }
 
-    /* check if sprite position is in the -31 to 0 range and move back to top */
-    if (yPos > 0xe0)
-    {
-      yPos -= 256;
+      /* check if sprite position is in the -31 to 0 range and move back to top */
+      if (yPos > 0xe0)
+      {
+        yPos -= 256;
+      }
     }
 
     /* first row is YPOS -1 (0xff). 2nd row is YPOS 0 */
-    yPos += 1;
+    if (!tms9918->registers[0x31] & 0x08)
+      yPos += 1;
 
     int16_t pattRow = y - yPos;
     if (spriteMag)
@@ -707,7 +711,7 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
     if (++spritesShown > MAX_SCANLINE_SPRITES)
     {
       if (((tempStatus & STATUS_5S) == 0) && 
-          (!tms9918->isUnlocked || (tms9918->registers[0x32] & 0x80) == 0 || spritesShown > tms9918->registers[0x1e]))
+          (!tms9918->isUnlocked || (tms9918->registers[0x32] & 0x08) == 0 || spritesShown > tms9918->registers[0x1e]))
       {
         tempStatus &= 0xe0;
         tempStatus |= STATUS_5S | spriteIdx;
@@ -1980,7 +1984,7 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
       tms9918->unlockCount = 0;
       tms9918->isUnlocked = true;
       tms9918->lockedMask = 0x3f;
-      tms9918->registers [0x1e] = MAX_SPRITES; // Sprites to process
+      tms9918->registers [0x1e] = MAX_SPRITES - 1; // Sprites to process
     }
   } else {
     tms9918->unlockCount = 0;
@@ -1995,8 +1999,9 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
     } else
     if ((regIndex == 0x38) && (value & 1)) {
       tms9918->restart = 1;
-    } else
-    if ((regIndex == 0x32) && (value & 0x80)) { // reset all registers?
+    } else if (regIndex == 0x1e && value == 0) {
+      tms9918->registers [0x1e] = MAX_SPRITES - 1;
+    } else if ((regIndex == 0x32) && (value & 0x80)) { // reset all registers?
       tms9918->unlockCount = 0;
       tms9918->isUnlocked = false;
       tms9918->lockedMask = 0x07;
