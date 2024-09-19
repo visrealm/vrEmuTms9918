@@ -88,8 +88,10 @@ struct vrEmuTMS9918_s
   /* buffered value */
   uint8_t readAheadBuffer;
 
-  uint8_t lockedMask; // 0x07 when locked, 0x3F when unlocked
+  uint8_t lockedMask;  // 0x07 when locked, 0x3F when unlocked
   uint8_t unlockCount; // number of unlock steps taken
+  bool isUnlocked;    // boolean version of lockedMask
+  
   volatile uint8_t restart;
 
   /* palette writes are done in two stages too */
