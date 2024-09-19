@@ -1196,20 +1196,25 @@ static inline uint32_t* renderEcm0Tile(
 
   uint32_t patt = patternTable[pattOffset];
 
+  const uint32_t bgColor = colorByte & 0x0f;
+  const uint32_t fgColor = colorByte >> 4;
 
-  const uint32_t bgPalette = repeatedPalette[pal | (colorByte & 0x0f)];
-  const uint32_t fgPalette = repeatedPalette[pal | (colorByte >> 4)];
+  const uint32_t bgPalette = repeatedPalette[pal | bgColor];
+  const uint32_t fgPalette = repeatedPalette[pal | fgColor];
 
   const uint32_t rightMask = maskExpandNibbleToWordRev[patt & 0xf];
   const uint32_t leftMask = maskExpandNibbleToWordRev[patt >> 4];
-  
+
   const uint32_t tileLeftPixels = (fgPalette & leftMask) | (bgPalette & ~leftMask);
   const uint32_t tileRightPixels = (fgPalette & rightMask) | (bgPalette & ~rightMask);
 
-
   /* have we any pixels to draw? */
   const uint32_t offset = (24 + startPattBit);  
-  uint32_t pattMask = 0xff << offset;
+  uint32_t pattMask = 0xff;
+  if (!bgColor) pattMask &= patt;
+  if (!fgColor) pattMask ^= patt;
+
+  pattMask <<= offset;
   pattMask = tmsTestCollisionMask(xPos, pattMask, 8, false);
   pattMask = tmsTestRowBitsMask(xPos, pattMask, 8, true, !isTile2);
 
@@ -1660,25 +1665,32 @@ static void __time_critical_func(vrEmuF18ATile2ScanLine)(VR_EMU_INST_ARG uint8_t
  * 
  * INLINE: so will be different versions generated, depending on hard-coded (or known at compile-time) arguments
  */
-static inline void __time_critical_func(renderBitmapLayer)(VR_EMU_INST_ARG uint8_t y, bool transp, const uint8_t width, const uint16_t addr, const bool before, const uint8_t bmlCtl, uint8_t pixels[TMS9918_PIXELS_X])
+static inline void __time_critical_func(renderBitmapLayer)(VR_EMU_INST_ARG uint8_t y, bool transp, const uint8_t width, const uint16_t addr, const uint8_t bmlCtl, uint8_t pixels[TMS9918_PIXELS_X])
 {
-  if (before && !transp && width == 64)
+  bool writeMask = bmlCtl & 0x40;
+
+  if (writeMask && !transp && width == 64)
   {
     for (int i = 0; i < TMS9918_PIXELS_X / 32; ++i)
       rowBits[i] = -1;
+    writeMask = false;
   }
 
   uint8_t xPos = tms9918->registers[0x21];
-
+  
+  uint32_t currentMask = 0;
+  
   if (bmlCtl & 0x10)  // fat 4bpp pixels?
   {
     const uint8_t colorMask = 0xf0;
     const uint8_t colorOffset = 4;
     const uint8_t colorCount = 2;
     const uint8_t colorSize = 4;
+    uint32_t maskPixelMask = 0x3 << 30;
+    uint32_t maskX = xPos;
 
     uint8_t pal = (bmlCtl & 0xc) << 2;
-
+    
     for (int xOff = 0; xOff < width; ++xOff)
     {
       uint8_t data = tms9918->vram[addr + xOff];
@@ -1690,10 +1702,23 @@ static inline void __time_critical_func(renderBitmapLayer)(VR_EMU_INST_ARG uint8
           uint8_t finalColour = pal | (color >> colorOffset);
           pixels[xPos] = finalColour;
           pixels[xPos + 1] = finalColour;
+          currentMask |= maskPixelMask;
         }
         xPos += 2;
         data <<= colorSize;
-      }    
+        maskPixelMask >>= 2;
+      }
+      if (writeMask && !maskPixelMask && currentMask)
+      {
+        tmsTestRowBitsMask(maskX, currentMask, 32, true, false);
+        maskX = xPos;
+        maskPixelMask = 0x3 << 30;
+        currentMask = 0;
+      }
+    }
+    if (writeMask && !maskPixelMask && currentMask)
+    {
+      tmsTestRowBitsMask(maskX, currentMask, 32, true, false);
     }
   }
   else // regular 2bpp pixels
@@ -1702,6 +1727,8 @@ static inline void __time_critical_func(renderBitmapLayer)(VR_EMU_INST_ARG uint8
     const uint8_t colorOffset = 6;
     const uint8_t colorCount = 4;
     const uint8_t colorSize = 2;
+    uint32_t maskPixelMask = 0x1 << 31;
+    uint32_t maskX = xPos;
 
     uint8_t pal = (bmlCtl & 0xf) << 2;
 
@@ -1714,10 +1741,24 @@ static inline void __time_critical_func(renderBitmapLayer)(VR_EMU_INST_ARG uint8
         if (!transp || color)
         {
           pixels[xPos] = pal | (color >> colorOffset);
+          currentMask |= maskPixelMask;
         }
         ++xPos;
         data <<= colorSize;
-      }    
+        maskPixelMask >>= 1;
+      }
+
+      if (writeMask && !maskPixelMask && currentMask)
+      {
+        tmsTestRowBitsMask(maskX, currentMask, 32, true, false);
+        maskX = xPos;
+        maskPixelMask = 0x1 << 31;
+        currentMask = 0;
+      }
+    }
+    if (writeMask && !maskPixelMask && currentMask)
+    {
+      tmsTestRowBitsMask(maskX, currentMask, 32, true, false);
     }
   }
 }
@@ -1727,15 +1768,11 @@ static inline void __time_critical_func(renderBitmapLayer)(VR_EMU_INST_ARG uint8
  * ----------------------------------------
  * generate an F18A bitmap layer scanline
  */
-static void __time_critical_func(vrEmuTms9918BitmapLayerScanLine)(VR_EMU_INST_ARG uint8_t y, uint8_t pixels[TMS9918_PIXELS_X], bool before)
+static void __time_critical_func(vrEmuTms9918BitmapLayerScanLine)(VR_EMU_INST_ARG uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
   /* bml enabled? */
   const uint8_t bmlCtl = tms9918->registers[0x1f];
   if (!(bmlCtl & 0x80))
-    return;
-
-  /* bml priority */
-  if ((bool)(bmlCtl & 0x40) != before)
     return;
 
   /* bml on this scanline? */
@@ -1752,11 +1789,11 @@ static void __time_critical_func(vrEmuTms9918BitmapLayerScanLine)(VR_EMU_INST_AR
 
   if (bmlCtl & 0x20) // transp
   {
-    renderBitmapLayer(VR_EMU_INST y, true, width, addr, before, bmlCtl, pixels);
+    renderBitmapLayer(VR_EMU_INST y, true, width, addr, bmlCtl, pixels);
   }
   else
   {
-    renderBitmapLayer(VR_EMU_INST y, false, width, addr, before, bmlCtl, pixels);
+    renderBitmapLayer(VR_EMU_INST y, false, width, addr, bmlCtl, pixels);
   }
 }
 
@@ -1774,15 +1811,13 @@ static uint8_t __time_critical_func(vrEmuTms9918GraphicsIScanLine)(VR_EMU_INST_A
   {
     const bool tilesDisabled = tms9918->registers[0x32] & 0x10;
 
-    tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
+    vrEmuTms9918BitmapLayerScanLine(VR_EMU_INST y, pixels);
 
-    vrEmuTms9918BitmapLayerScanLine(VR_EMU_INST y, pixels, true);
+    tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
 
     if (tms9918->registers[0x31] & 0x80) vrEmuF18ATile2ScanLine(y, pixels);
 
     if (!tilesDisabled) vrEmuF18ATile1ScanLine(y, pixels);
-
-    vrEmuTms9918BitmapLayerScanLine(VR_EMU_INST y, pixels, false);
   }
   else
   {
