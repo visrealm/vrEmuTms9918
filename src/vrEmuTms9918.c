@@ -620,6 +620,26 @@ void initLookups()
   lookupsReady = true;
 }
 
+static inline void loadSpriteData(uint32_t *spriteBits, uint32_t pattOffset, uint32_t *pattMask, const uint32_t ecm, const uint32_t ecmOffset, const bool flipX, const bool sprite16)
+{
+  int i = 0;
+  do
+  {
+    uint32_t patt;
+    patt = tms9918->vram[pattOffset];
+    if (flipX) patt = reversedBits[patt];
+    spriteBits[i] = patt << ((flipX && sprite16) ? 16 : 24);
+    if (sprite16)
+    {
+      patt = tms9918->vram[pattOffset + PATTERN_BYTES * 2];
+      if (flipX) patt = reversedBits[patt];
+      spriteBits[i] |= patt << (flipX ? 24 : 16);
+    }
+    *pattMask |= spriteBits[i];
+    pattOffset += ecmOffset;
+  } while (++i < ecm);
+}
+
 
 /* Function:  vrEmuTms9918OutputSprites
  * ----------------------------------------
@@ -633,6 +653,8 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
   const uint8_t spriteSizePx = spriteSize * (spriteMag + 1);
   const uint16_t spriteAttrTableAddr = tmsSpriteAttrTableAddr(tms9918);
   const uint16_t spritePatternAddr = tmsSpritePatternTableAddr(tms9918);
+  const bool row30Mode = tms9918->registers[0x31] & 0x40;
+  const uint32_t maxY = row30Mode ? 0xf0 : 0xe0;
 
   uint32_t spritesShown = 0;
   uint8_t tempStatus = 0x1f;
@@ -665,23 +687,22 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
     int32_t yPos = spriteAttr[SPRITE_ATTR_Y];
 
     /* stop processing when yPos == LAST_SPRITE_YPOS */
-    if (!tms9918->isUnlocked)
+    if (!row30Mode)
     {
       if (yPos == LAST_SPRITE_YPOS)
       {
         break;
-      }
-
-      /* check if sprite position is in the -31 to 0 range and move back to top */
-      if (yPos > 0xe0)
-      {
-        yPos -= 256;
       }
     }
 
     /* first row is YPOS -1 (0xff). 2nd row is YPOS 0 */
     if (!realY)
       yPos += 1;
+
+    /* check if sprite position is in the -31 to 0 range and move back to top */
+    if (yPos > maxY)
+      yPos -= 256;
+
 
     int32_t pattRow = y - yPos;
     if (spriteMag)
@@ -745,6 +766,20 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
      */
     uint32_t pattMask = 0;
     uint32_t spriteBits[3] = {0}; // a 32-bit value for each ecm bit plane (also pushed far left)
+    const bool flipX = spriteAttr[SPRITE_ATTR_COLOR] & 0x40;
+
+    if (flipX)
+      if (thisSprite16)
+        loadSpriteData(spriteBits, pattOffset, &pattMask, ecm, ecmOffset, true, true);
+      else
+        loadSpriteData(spriteBits, pattOffset, &pattMask, ecm, ecmOffset, true, false);
+    else
+      if (thisSprite16)
+        loadSpriteData(spriteBits, pattOffset, &pattMask, ecm, ecmOffset, false, true);
+      else
+        loadSpriteData(spriteBits, pattOffset, &pattMask, ecm, ecmOffset, false, false);
+
+#if 0
 
     /* load up the pattern data */
     if (spriteAttr[SPRITE_ATTR_COLOR] & 0x40) // flip X?
@@ -794,6 +829,8 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
         pattOffset += ecmOffset;
       } while (++i < ecm);
     }
+
+#endif
 
     /* bail early if no bits to draw */
     if (!pattMask)
@@ -878,7 +915,7 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
             xPos += 8;
           }
         }
-        else
+        else  // regular ecm sprite (8 or 16px, non-magnified)
         {
           // get him to be word aligned so we can smash out 4 pixels at a time
           uint32_t quadOffset = xPos >> 2;
@@ -909,7 +946,7 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
           }
         }
       }
-      else
+      else  // non-ecm single-color sprite
       {
         while (validPixels)
         {
@@ -927,7 +964,7 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
       // keep track of the transparent sprites, because we want to remove them from the rowSpriteBits mask later
       if (!transparentCount)
       {
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < 8; ++i) // clear rowTransparentSpriteBits only when we need it
         {
           rowTransparentSpriteBits[i] = 0;
         }
@@ -939,7 +976,7 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
     spriteAttr += SPRITE_ATTR_BYTES;
   }
 
-  // remove the transparent sprites if there are any
+  // remove the transparent sprite pixels if there are any
   if (transparentCount)
   {
     for (int i = 0; i < 8; ++i)
