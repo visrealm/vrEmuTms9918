@@ -1661,8 +1661,8 @@ static void __time_critical_func(vrEmuF18ATile1ScanLine)(VR_EMU_INST_ARG uint8_t
   uint32_t colorTableAddr = tmsColorTableAddr(tms9918);
   if (attrPerPos)
   {
-    if (swapYPage) colorTableAddr ^= 0x800;
     colorTableAddr += rowOffset;
+    colorTableAddr |= rowNamesAddr & 0xc00;
   }
 
 
@@ -1712,8 +1712,8 @@ static void __time_critical_func(vrEmuF18ATile2ScanLine)(VR_EMU_INST_ARG uint8_t
   uint32_t colorTableAddr = tmsColorTable2Addr(tms9918);
   if (attrPerPos)
   {
-    if (swapYPage) colorTableAddr ^= 0x800;
     colorTableAddr += rowOffset;
+    colorTableAddr |= rowNamesAddr & 0xc00;
   }
 
   const uint8_t pal = (tms9918->registers[0x18] & 0x0c) << 2;
