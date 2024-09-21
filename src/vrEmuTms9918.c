@@ -64,7 +64,7 @@ static inline vrEmuTms9918Mode tmsMode(VrEmuTms9918* tms9918)
     return TMS_MODE_GRAPHICS_II;
   else if (tms9918->registers[TMS_REG_0] & TMS_R0_MODE_TEXT_80)
     return TMS_MODE_TEXT80;
-  else
+  else 
     return r1Modes [(tms9918->registers[TMS_REG_1] & (TMS_R1_MODE_MULTICOLOR | TMS_R1_MODE_TEXT)) >> 3];
 }
 
@@ -297,7 +297,7 @@ static inline void vdpRegisterReset(VrEmuTms9918* tms9918)
   tms9918->registers [0x05] = 0x0A;
   tms9918->registers [0x06] = 0x02;
   tms9918->registers [0x07] = 0xF2;
-  tms9918->registers [0x1e] = MAX_SCANLINE_SPRITES; // scanline sprites
+  tms9918->registers [0x1e] = MAX_SPRITES - 1; // scanline sprites
   tms9918->registers [0x30] = 1; // vram address increment register
   tms9918->registers [0x33] = MAX_SPRITES; // Sprites to process
   tms9918->registers [0x36] = 0x40;
@@ -1029,7 +1029,7 @@ static void __time_critical_func(vrEmuTms9918TextScanLine)(VR_EMU_INST_ARG uint8
   const uint8_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
 
   /* address in name table at the start of this row */
-  uint8_t* rowNamesTable = tms9918->vram + tmsNameTableAddr(tms9918) + tileY * TEXT_NUM_COLS;
+  uint8_t* rowNamesTable = tms9918->vram + (tmsNameTableAddr(tms9918) & (0x0c << 10)) + tileY * TEXT80_NUM_COLS;//tms9918->vram + tmsNameTableAddr(tms9918) + tileY * TEXT_NUM_COLS;
   const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918) + pattRow;
 
   const vrEmuTms9918Color bgFgColor[2] = {
@@ -2047,7 +2047,7 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ScanLine)(VR_E
         tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
         break;
 
-      case TMS_R0_MODE_TEXT_80:
+      case TMS_MODE_TEXT80:
         vrEmuTms9918Text80ScanLine(VR_EMU_INST y, pixels);
         break;
     }
@@ -2073,8 +2073,9 @@ uint8_t __time_critical_func(vrEmuTms9918RegValue)(VR_EMU_INST_ARG vrEmuTms9918R
 VR_EMU_TMS9918_DLLEXPORT
 void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms9918Register reg, uint8_t value)
 {
-  if ((reg == (0x80 | 0x39)) && (value == 0x1C)) {
-    tms9918->registers[0x39] = 0x1C; // Allow this one through even when locked
+  if ((reg == (0x80 | 0x39)) && ((value & 0xfc) == 0x1c))
+  {
+    tms9918->registers[0x39] = 0x1c; // Allow this one through even when locked
     if (++tms9918->unlockCount == 2)
     {
       tms9918->unlockCount = 0;
@@ -2082,26 +2083,37 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
       tms9918->lockedMask = 0x3f;
       tms9918->registers [0x1e] = MAX_SPRITES - 1; // Sprites to process
     }
-  } else {
+  }
+  else
+  {
     tms9918->unlockCount = 0;
+    
+    if ((reg & ~tms9918->lockedMask) != 0x80) return;
+
     int regIndex = reg & tms9918->lockedMask; // was 0x07
     tms9918->registers[regIndex] = value;
-    if ((regIndex == 0x37) || ((regIndex == 0x38) && ((value & 1) == 0))) {
+    if ((regIndex == 0x37) || ((regIndex == 0x38) && ((value & 1) == 0)))
+    {
       tms9918->gpuAddress = ((tms9918->registers [0x36] << 8) | tms9918->registers [0x37]) & 0xFFFE;
-      if (regIndex == 0x37) {
+      if (regIndex == 0x37)
+      {
         tms9918->registers [0x38] = 0;
         tms9918->restart = 1;
       }
-    } else
-    if ((regIndex == 0x38) && (value & 1)) {
+    }
+    else if ((regIndex == 0x38) && (value & 1))
+    {
       tms9918->restart = 1;
-    } else if (regIndex == 0x1e && value == 0) {
+    }
+    else if (regIndex == 0x1e && value == 0)
+    {
       tms9918->registers [0x1e] = MAX_SPRITES - 1;
-    } else if ((regIndex == 0x32) && (value & 0x80)) { // reset all registers?
+    }
+    else if ((regIndex == 0x32) && (value & 0x80))
+    { // reset all registers?
       vdpRegisterReset(tms9918);
-    } else
-    
-    if (regIndex == 0x0F)
+    }
+    else if (regIndex == 0x0F)
     {
       uint8_t statReg = (value & 0x0f);
       tms9918->status [0x0F] = statReg;
