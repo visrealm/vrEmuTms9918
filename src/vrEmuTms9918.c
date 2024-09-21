@@ -2066,6 +2066,8 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ScanLine)(VR_E
 
       case TMS_MODE_TEXT:
         vrEmuTms9918TextScanLine(VR_EMU_INST y, pixels);
+        if (tms9918->isUnlocked)
+          tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
         break;
 
       case TMS_MODE_MULTICOLOR:
@@ -2075,6 +2077,8 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ScanLine)(VR_E
 
       case TMS_MODE_TEXT80:
         vrEmuTms9918Text80ScanLine(VR_EMU_INST y, pixels);
+        if (tms9918->isUnlocked)
+          tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
         break;
     }
   }
