@@ -1063,7 +1063,7 @@ static void __time_critical_func(vrEmuTms9918TextScanLine)(VR_EMU_INST_ARG uint8
  */
 static void __time_critical_func(vrEmuTms9918Text80ScanLine)(VR_EMU_INST_ARG uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
-  const uint8_t tileY = y >> 3;   /* which name table row (0 - 23) */
+  const uint8_t tileY = y >> 3;   /* which name table row (0 - 23... or 29) */
   const uint8_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
 
   /* address in name table at the start of this row */
@@ -1071,33 +1071,59 @@ static void __time_critical_func(vrEmuTms9918Text80ScanLine)(VR_EMU_INST_ARG uin
   const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918) + pattRow;
 
   const vrEmuTms9918Color bgColor = tmsMainBgColor(tms9918);
-  const vrEmuTms9918Color fgColor = tmsMainFgColor(tms9918);
 
-  const uint8_t bgFgColor[4] =
+    /* fill the first and last 16 pixels with bg color */
+  tmsMemset(pixels, (bgColor << 4) | bgColor, TEXT_PADDING_PX);
+  pixels += TEXT_PADDING_PX;
+
+  if (tms9918->registers[0x32] & 0x02)  // position-based attributes
   {
-    (bgColor << 4) | bgColor,
-    (bgColor << 4) | fgColor,
-    (fgColor << 4) | bgColor,
-    (fgColor << 4) | fgColor
-  };
+    uint8_t* colorTable = tms9918->vram + tmsColorTableAddr(tms9918) + tileY * TEXT80_NUM_COLS;
 
-  uint8_t* pixPtr = pixels;
-
-  /* fill the first and last 16 pixels with bg color */
-  tmsMemset(pixPtr, bgFgColor[0], TEXT_PADDING_PX);
-
-  pixPtr += TEXT_PADDING_PX;
-
-  for (uint8_t tileX = 0; tileX < TEXT80_NUM_COLS; ++tileX)
-  {
-    uint8_t pattByte = patternTable[*rowNamesTable++ * PATTERN_BYTES];
-    for (uint8_t pattBit = 6; pattBit > 1; pattBit -= 2)
+    for (uint8_t tileX = 0; tileX < TEXT80_NUM_COLS; ++tileX)
     {
-      *pixPtr++ = bgFgColor[(pattByte >> pattBit) & 0x03];
+      const uint8_t colorByte = colorTable[tileX];
+      const uint8_t pattByte = patternTable[*rowNamesTable++ * PATTERN_BYTES];
+      const uint8_t fgColor = colorByte >> 4;
+      const uint8_t bgColor = colorByte & 0xf;
+
+      const uint8_t bgFgColor[4] =
+      {
+        (bgColor << 4) | bgColor,
+        (bgColor << 4) | fgColor,
+        (fgColor << 4) | bgColor,
+        (fgColor << 4) | fgColor
+      };      
+
+      for (uint8_t pattBit = 6; pattBit > 1; pattBit -= 2)
+      {
+        *pixels++ = bgFgColor[(pattByte >> pattBit) & 0x03];
+      }
+    }
+
+  }
+  else  // just plain old two-tone
+  {
+    const vrEmuTms9918Color fgColor = tmsMainFgColor(tms9918);
+
+    const uint8_t bgFgColor[4] =
+    {
+      (bgColor << 4) | bgColor,
+      (bgColor << 4) | fgColor,
+      (fgColor << 4) | bgColor,
+      (fgColor << 4) | fgColor
+    };
+
+    for (uint8_t tileX = 0; tileX < TEXT80_NUM_COLS; ++tileX)
+    {
+      uint8_t pattByte = patternTable[*rowNamesTable++ * PATTERN_BYTES];
+      for (uint8_t pattBit = 6; pattBit > 1; pattBit -= 2)
+      {
+        *pixels++ = bgFgColor[(pattByte >> pattBit) & 0x03];
+      }
     }
   }
-
-  tmsMemset(pixPtr, bgFgColor[0], TEXT_PADDING_PX);
+  tmsMemset(pixels, (bgColor << 4) | bgColor, TEXT_PADDING_PX);
 }
 
 
