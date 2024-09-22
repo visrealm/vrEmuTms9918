@@ -1029,7 +1029,7 @@ static void __time_critical_func(vrEmuTms9918TextScanLine)(VR_EMU_INST_ARG uint8
   const uint8_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
 
   /* address in name table at the start of this row */
-  uint8_t* rowNamesTable = tms9918->vram + (tmsNameTableAddr(tms9918) & (0x0c << 10)) + tileY * TEXT80_NUM_COLS;//tms9918->vram + tmsNameTableAddr(tms9918) + tileY * TEXT_NUM_COLS;
+  uint8_t* rowNamesTable = tms9918->vram + tmsNameTableAddr(tms9918) + tileY * TEXT_NUM_COLS;
   const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918) + pattRow;
 
   const vrEmuTms9918Color bgFgColor[2] = {
@@ -1057,50 +1057,166 @@ static void __time_critical_func(vrEmuTms9918TextScanLine)(VR_EMU_INST_ARG uint8
   tmsMemset(pixPtr, bgFgColor[0], TEXT_PADDING_PX);
 }
 
-/* Function:  vrEmuTms9918Text80ScanLine
- * ----------------------------------------
- * generate an 80-column text mode scanline
- */
-static void __time_critical_func(vrEmuTms9918Text80ScanLine)(VR_EMU_INST_ARG uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
+static const uint8_t __aligned(4) maskText80Fg[] = { 0x00, 0x0f, 0xf0, 0xff };
+
+inline static void renderText80Layer(
+  uint8_t y, const uint8_t tileY, uint8_t* rowNamesTable, const uint8_t *patternTable, uint8_t* colorTable, const bool opaq, uint8_t *pixels)
 {
-  const uint8_t tileY = y >> 3;   /* which name table row (0 - 23... or 29) */
-  const uint8_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
 
-  /* address in name table at the start of this row */
-  uint8_t* rowNamesTable = tms9918->vram + (tmsNameTableAddr(tms9918) & (0x0c << 10)) + tileY * TEXT80_NUM_COLS;
-  const uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918) + pattRow;
-
-  const vrEmuTms9918Color bgColor = tmsMainBgColor(tms9918);
-
-    /* fill the first and last 16 pixels with bg color */
-  tmsMemset(pixels, (bgColor << 4) | bgColor, TEXT_PADDING_PX);
-  pixels += TEXT_PADDING_PX;
-
-  if (tms9918->registers[0x32] & 0x02)  // position-based attributes
+  for (uint8_t tileX = 0; tileX < TEXT80_NUM_COLS; ++tileX)
   {
-    uint8_t* colorTable = tms9918->vram + tmsColorTableAddr(tms9918) + tileY * TEXT80_NUM_COLS;
+    const uint8_t colorByte = colorTable[tileX];
+    const int8_t pattByte = patternTable[*rowNamesTable++ * PATTERN_BYTES];
+    const uint8_t fgColor = colorByte >> 4;
+    const uint8_t bgColor = colorByte & 0xf;
 
-    for (uint8_t tileX = 0; tileX < TEXT80_NUM_COLS; ++tileX)
+    if (opaq)
     {
-      const uint8_t colorByte = colorTable[tileX];
-      const uint8_t pattByte = patternTable[*rowNamesTable++ * PATTERN_BYTES];
-      const uint8_t fgColor = colorByte >> 4;
-      const uint8_t bgColor = colorByte & 0xf;
-
       const uint8_t bgFgColor[4] =
       {
         (bgColor << 4) | bgColor,
         (bgColor << 4) | fgColor,
         (fgColor << 4) | bgColor,
         (fgColor << 4) | fgColor
-      };      
+      };    
 
       for (uint8_t pattBit = 6; pattBit > 1; pattBit -= 2)
       {
         *pixels++ = bgFgColor[(pattByte >> pattBit) & 0x03];
       }
+      continue;
     }
 
+    const uint8_t bgFgColor[4] =
+    {
+      (bgColor << 4) | bgColor,
+      (bgColor << 4) | fgColor,
+      (fgColor << 4) | bgColor,
+      (fgColor << 4) | fgColor
+    };    
+
+    
+    if ((!bgColor && !pattByte) || (!fgColor && pattByte == 0xff))
+    {
+      pixels += 3;
+      continue;
+    }
+
+    /*if (!bgColor)
+    {
+      for (uint8_t pattBit = 6; pattBit > 1; pattBit -= 2)
+      {
+        uint8_t index = (pattByte >> pattBit) & 0x03;
+        uint8_t mask = ~maskText80Fg[index];
+        *pixels++ = (*pixels & mask) | bgFgColor[index];
+      }
+    }
+    else if (!fgColor)
+    {
+      for (uint8_t pattBit = 6; pattBit > 1; pattBit -= 2)
+      {
+        uint8_t index = (pattByte >> pattBit) & 0x03;
+        uint8_t mask = maskText80Fg[index];
+        *pixels++ = (*pixels & mask) | bgFgColor[index];
+      }
+    }
+    else*/
+    {
+      for (uint8_t pattBit = 6; pattBit > 1; pattBit -= 2)
+      {
+        *pixels++ = bgFgColor[(pattByte >> pattBit) & 0x03];
+      }
+    }  
+  }
+}
+
+
+/* Function:  vrEmuTms9918Text80ScanLine
+ * ----------------------------------------
+ * generate an 80-column text mode scanline
+ */
+static void __time_critical_func(vrEmuTms9918Text80ScanLine)(VR_EMU_INST_ARG uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
+{
+  int originalY = y;
+  bool swapYPage = false;
+  if (tms9918->registers[0x1c])
+  {
+    int virtY = y;
+    virtY += tms9918->registers[0x1c];
+
+    int maxY = (tms9918->registers[0x31] & 0x40) ? (8 * 30) : (8 * 24);
+
+    if (virtY >= maxY)
+    {
+      virtY -= maxY;
+      swapYPage = (bool)(tms9918->registers[0x1d] & 0x01);
+    }
+   
+    y = virtY;
+  }
+
+  uint8_t tileY = y >> 3;   /* which name table row (0 - 23... or 29) */
+  uint8_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
+
+
+  uint8_t nameTableMask = tms9918->isUnlocked ? 0x0f : 0xc0;  
+
+  /* address in name table at the start of this row */
+  uint32_t rowNamesAddr = (tmsNameTableAddr(tms9918) & (nameTableMask << 10)) + tileY * TEXT80_NUM_COLS;
+  if (swapYPage) rowNamesAddr ^= 0x800;
+  
+  uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918) + pattRow;
+
+  const vrEmuTms9918Color bgColor = tmsMainBgColor(tms9918);
+
+    /* fill the first and last 16 pixels with bg color */
+  //tmsMemset(pixels, (bgColor << 4) | bgColor, TEXT_PADDING_PX);
+  pixels += TEXT_PADDING_PX;
+
+  if (tms9918->registers[0x32] & 0x02)  // position-based attributes
+  {
+    uint32_t colorTableAddr = (tmsColorTableAddr(tms9918)) + tileY * TEXT80_NUM_COLS;
+  if (swapYPage) colorTableAddr ^= 0x800;
+
+    const bool tilesDisabled = tms9918->registers[0x32] & 0x10;
+    if (!tilesDisabled) renderText80Layer(y, tileY, tms9918->vram + rowNamesAddr, patternTable, tms9918->vram + colorTableAddr, true, pixels);
+
+    if (tms9918->registers[0x31] & 0x80)
+    {
+      y = originalY;
+      swapYPage = false;
+      if (tms9918->registers[0x1a])
+      {
+        int virtY = y;
+        virtY += tms9918->registers[0x1a];
+
+        int maxY = (tms9918->registers[0x31] & 0x40) ? (8 * 30) : (8 * 24);
+
+        if (virtY >= maxY)
+        {
+          virtY -= maxY;
+          swapYPage = (bool)(tms9918->registers[0x1d] & 0x10);
+        }
+      
+        y = virtY;
+      }
+
+      uint8_t tileY = y >> 3;   /* which name table row (0 - 23... or 29) */
+      uint8_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
+
+      uint8_t* patternTable = tms9918->vram + tmsPatternTableAddr(tms9918) + pattRow;
+
+      rowNamesAddr = (tmsNameTable2Addr(tms9918) & (nameTableMask << 10)) + tileY * TEXT80_NUM_COLS;
+      colorTableAddr = (tmsColorTable2Addr(tms9918) ) + tileY * TEXT80_NUM_COLS;
+      if (swapYPage)
+      {
+        rowNamesAddr ^= 0x800;
+        colorTableAddr ^= 0x800;
+      }
+
+      renderText80Layer(y, tileY, tms9918->vram + rowNamesAddr, patternTable, tms9918->vram + colorTableAddr, false, pixels);
+    }
+//    pixels += 40 * 6;
   }
   else  // just plain old two-tone
   {
@@ -1114,6 +1230,8 @@ static void __time_critical_func(vrEmuTms9918Text80ScanLine)(VR_EMU_INST_ARG uin
       (fgColor << 4) | fgColor
     };
 
+    uint8_t *rowNamesTable = tms9918->vram + rowNamesAddr;
+
     for (uint8_t tileX = 0; tileX < TEXT80_NUM_COLS; ++tileX)
     {
       uint8_t pattByte = patternTable[*rowNamesTable++ * PATTERN_BYTES];
@@ -1123,7 +1241,7 @@ static void __time_critical_func(vrEmuTms9918Text80ScanLine)(VR_EMU_INST_ARG uin
       }
     }
   }
-  tmsMemset(pixels, (bgColor << 4) | bgColor, TEXT_PADDING_PX);
+  //tmsMemset(pixels, (bgColor << 4) | bgColor, TEXT_PADDING_PX);
 }
 
 
