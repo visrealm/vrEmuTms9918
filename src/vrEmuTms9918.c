@@ -19,7 +19,7 @@
 
 #if VR_EMU_TMS9918_SINGLE_INSTANCE
 
-static VrEmuTms9918 __aligned(8) tms9918Inst;
+static VrEmuTms9918 __aligned(256) tms9918Inst;
 
 VrEmuTms9918* tms9918 = &tms9918Inst;
 
