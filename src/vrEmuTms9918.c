@@ -1170,7 +1170,7 @@ static void __time_critical_func(vrEmuTms9918Text80ScanLine)(VR_EMU_INST_ARG uin
   const vrEmuTms9918Color bgColor = tmsMainBgColor(tms9918);
 
     /* fill the first and last 16 pixels with bg color */
-  //tmsMemset(pixels, (bgColor << 4) | bgColor, TEXT_PADDING_PX);
+  tmsMemset(pixels, (bgColor << 4) | bgColor, TEXT_PADDING_PX);
   pixels += TEXT_PADDING_PX;
 
   if (tms9918->registers[0x32] & 0x02)  // position-based attributes
@@ -1216,7 +1216,7 @@ static void __time_critical_func(vrEmuTms9918Text80ScanLine)(VR_EMU_INST_ARG uin
 
       renderText80Layer(y, tileY, tms9918->vram + rowNamesAddr, patternTable, tms9918->vram + colorTableAddr, false, pixels);
     }
-//    pixels += 40 * 6;
+    pixels += 40 * 6;
   }
   else  // just plain old two-tone
   {
@@ -1241,7 +1241,7 @@ static void __time_critical_func(vrEmuTms9918Text80ScanLine)(VR_EMU_INST_ARG uin
       }
     }
   }
-  //tmsMemset(pixels, (bgColor << 4) | bgColor, TEXT_PADDING_PX);
+  tmsMemset(pixels, (bgColor << 4) | bgColor, TEXT_PADDING_PX);
 }
 
 
