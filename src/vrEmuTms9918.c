@@ -391,22 +391,20 @@ static __attribute__((section(".scratch_x.lookup"))) uint32_t __aligned(4) rowBi
  * ----------------------------------------
  * Test and update the sprite collision mask.
  */
-static inline uint32_t tmsTestCollisionMask(VR_EMU_INST_ARG const uint32_t xPos, const uint32_t spritePixels, const uint32_t spriteWidth, const bool update)
+static inline uint32_t tmsTestCollisionMask(VR_EMU_INST_ARG const uint32_t xPos, const uint32_t spritePixels, const uint32_t spriteWidth)
 {
-  if (!update && !tms9918->scanlineHasSprites) return spritePixels;
-
   uint32_t rowSpriteBitsWord = xPos >> 5;
   uint32_t rowSpriteBitsWordBit = xPos & 0x1f;
   
   uint32_t validPixels = (~rowSpriteBits[rowSpriteBitsWord]) & (spritePixels >> rowSpriteBitsWordBit);
-  if (update) rowSpriteBits[rowSpriteBitsWord] |= validPixels;
+  rowSpriteBits[rowSpriteBitsWord] |= validPixels;
   validPixels <<= rowSpriteBitsWordBit;
 
   if ((rowSpriteBitsWordBit + spriteWidth) > 32)
   {
     rowSpriteBitsWordBit = 32 - rowSpriteBitsWordBit;
     uint32_t right = (~rowSpriteBits[++rowSpriteBitsWord]) & (spritePixels << rowSpriteBitsWordBit);
-    if (update) rowSpriteBits[rowSpriteBitsWord] |= right;
+    rowSpriteBits[rowSpriteBitsWord] |= right;
     validPixels |= (right >> rowSpriteBitsWordBit);
   }
 
@@ -433,32 +431,35 @@ static inline void tmsSetTransparentSpriteMask(VR_EMU_INST_ARG const uint32_t xP
 }
 
 
-
 /* Function:  tmsTestRowBitsMask
  * ----------------------------------------
  * Test and update the row pixels bit mask.
  */
-static inline uint32_t tmsTestRowBitsMask(VR_EMU_INST_ARG const uint32_t xPos, const uint32_t tilePixels, const uint32_t tileWidth, const bool update, const bool test)
+static inline uint32_t tmsTestRowBitsMask(VR_EMU_INST_ARG const uint32_t xPos, const uint32_t tilePixels, const uint32_t tileWidth, const bool update, const bool test, const bool testColl)
 {
   uint32_t rowBitsWord = xPos >> 5;
   uint32_t rowBitsWordBit = xPos & 0x1f;
 
   uint32_t validPixels = tilePixels >> rowBitsWordBit;
-  if (test) validPixels &= (~rowBits[rowBitsWord]);
+  if (testColl) validPixels &= ~rowSpriteBits[rowBitsWord];
+  if (test) validPixels &= ~rowBits[rowBitsWord];
   if (update) rowBits[rowBitsWord] |= validPixels;
-  if (test) validPixels <<= rowBitsWordBit;
-
+  if (test || testColl) validPixels <<= rowBitsWordBit;
+  
   if ((rowBitsWordBit + tileWidth) > 32)
   {
     ++rowBitsWord;
     rowBitsWordBit = 32 - rowBitsWordBit;
     uint32_t right = (tilePixels << rowBitsWordBit);
+
+    if (testColl) right &= ~rowSpriteBits[rowBitsWord];
     if (test) right &= ~rowBits[rowBitsWord];
+
     if (update) rowBits[rowBitsWord] |= right;
-    if (test) validPixels |= (right >> rowBitsWordBit);
+    if (test || testColl) validPixels |= (right >> rowBitsWordBit);
   }
 
-  return test ? validPixels : tilePixels;
+  return (test || testColl) ? validPixels : tilePixels;
 }
 
 
@@ -790,7 +791,7 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
     }
 
     /* test and update the collision mask */
-    uint32_t validPixels = tmsTestCollisionMask(VR_EMU_INST xPos, pattMask, thisSpriteSizePx, true);
+    uint32_t validPixels = tmsTestCollisionMask(VR_EMU_INST xPos, pattMask, thisSpriteSizePx);
 
     /* if the result is different, we collided */
     if (validPixels != pattMask)
@@ -1263,7 +1264,7 @@ static inline uint32_t* renderEcm0Tile(
 {
   /* was this pattern empty? we remember the last empty pattern.
      OR is the pixel mask full here? in either case, let's bail */
-  if ((!isTile2 && !tmsTestRowBitsMask(xPos, 0xff << (24 + startPattBit), 8 - startPattBit, false, true)))
+  if ((!isTile2 && !tmsTestRowBitsMask(xPos, 0xff << (24 + startPattBit), 8 - startPattBit, false, true, false)))
   {
     return quadPixels + quadPixelIncrement(startPattBit);
   }
@@ -1296,8 +1297,7 @@ static inline uint32_t* renderEcm0Tile(
   if (!fgColor) pattMask ^= patt;
 
   pattMask <<= offset;
-  pattMask = tmsTestCollisionMask(xPos, pattMask, 8, false);
-  pattMask = tmsTestRowBitsMask(xPos, pattMask, 8, true, !isTile2);
+  pattMask = tmsTestRowBitsMask(xPos, pattMask, 8, true, !isTile2, true);
 
     /* anything to draw?*/
   if (!pattMask)
@@ -1365,7 +1365,7 @@ static inline uint32_t* renderEcmTile(
   /* was this pattern empty? we remember the last empty pattern.
      OR is the pixel mask full here? in either case, let's bail */
   if (*lastEmpty == pattIdx ||
-      (!isTile2 && !tmsTestRowBitsMask(xPos, 0xff << (24 + startPattBit), 8 - startPattBit, false, true)))
+      (!isTile2 && !tmsTestRowBitsMask(xPos, 0xff << (24 + startPattBit), 8 - startPattBit, false, true, false)))
   {
     return quadPixels + quadPixelIncrement(startPattBit);
   }
@@ -1428,10 +1428,9 @@ static inline uint32_t* renderEcmTile(
     const uint32_t offset = (24 + startPattBit);
     pattMask <<= offset;
     if (!priority)
-    {
-      pattMask = tmsTestCollisionMask(xPos, pattMask, 8, false);
-    }
-    pattMask = tmsTestRowBitsMask(xPos, pattMask, 8, true, !isTile2);
+      pattMask = tmsTestRowBitsMask(xPos, pattMask, 8, true, !isTile2, true);
+    else
+      pattMask = tmsTestRowBitsMask(xPos, pattMask, 8, true, !isTile2, false);
 
       /* anything to draw?*/
     if (!pattMask)
@@ -1806,7 +1805,7 @@ static inline void __time_critical_func(renderBitmapLayer)(VR_EMU_INST_ARG uint8
       }
       if (writeMask && !maskPixelMask && currentMask)
       {
-        tmsTestRowBitsMask(maskX, currentMask, 32, true, false);
+        tmsTestRowBitsMask(maskX, currentMask, 32, true, false, false);
         maskX = xPos;
         maskPixelMask = 0x3 << 30;
         currentMask = 0;
@@ -1814,7 +1813,7 @@ static inline void __time_critical_func(renderBitmapLayer)(VR_EMU_INST_ARG uint8
     }
     if (writeMask && currentMask)
     {
-      tmsTestRowBitsMask(maskX, currentMask, xPos - maskX, true, false);
+      tmsTestRowBitsMask(maskX, currentMask, xPos - maskX, true, false, false);
     }
   }
   else // regular 2bpp pixels
@@ -1846,7 +1845,7 @@ static inline void __time_critical_func(renderBitmapLayer)(VR_EMU_INST_ARG uint8
 
       if (writeMask && !maskPixelMask && currentMask)
       {
-        tmsTestRowBitsMask(maskX, currentMask, 32, true, false);
+        tmsTestRowBitsMask(maskX, currentMask, 32, true, false, false);
         maskX = xPos;
         maskPixelMask = 0x1 << 31;
         currentMask = 0;
@@ -1854,7 +1853,7 @@ static inline void __time_critical_func(renderBitmapLayer)(VR_EMU_INST_ARG uint8
     }
     if (writeMask && currentMask)
     {
-      tmsTestRowBitsMask(maskX, currentMask, xPos - maskX, true, false);
+      tmsTestRowBitsMask(maskX, currentMask, xPos - maskX, true, false, false);
     }
   }
 }
