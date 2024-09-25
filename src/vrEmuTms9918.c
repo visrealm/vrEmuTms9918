@@ -404,22 +404,20 @@ static __attribute__((section(".scratch_x.lookup"))) uint32_t __aligned(4) rowBi
  * ----------------------------------------
  * Test and update the sprite collision mask.
  */
-static inline uint32_t tmsTestCollisionMask(VR_EMU_INST_ARG const uint32_t xPos, const uint32_t spritePixels, const uint32_t spriteWidth, const bool update)
+static inline uint32_t tmsTestCollisionMask(VR_EMU_INST_ARG const uint32_t xPos, const uint32_t spritePixels, const uint32_t spriteWidth)
 {
-  if (!update && !tms9918->scanlineHasSprites) return spritePixels;
-
   uint32_t rowSpriteBitsWord = xPos >> 5;
   uint32_t rowSpriteBitsWordBit = xPos & 0x1f;
   
   uint32_t validPixels = (~rowSpriteBits[rowSpriteBitsWord]) & (spritePixels >> rowSpriteBitsWordBit);
-  if (update) rowSpriteBits[rowSpriteBitsWord] |= validPixels;
+  rowSpriteBits[rowSpriteBitsWord] |= validPixels;
   validPixels <<= rowSpriteBitsWordBit;
 
   if ((rowSpriteBitsWordBit + spriteWidth) > 32)
   {
     rowSpriteBitsWordBit = 32 - rowSpriteBitsWordBit;
     uint32_t right = (~rowSpriteBits[++rowSpriteBitsWord]) & (spritePixels << rowSpriteBitsWordBit);
-    if (update) rowSpriteBits[rowSpriteBitsWord] |= right;
+    rowSpriteBits[rowSpriteBitsWord] |= right;
     validPixels |= (right >> rowSpriteBitsWordBit);
   }
 
@@ -451,29 +449,32 @@ static inline void tmsSetTransparentSpriteMask(VR_EMU_INST_ARG const uint32_t xP
  * ----------------------------------------
  * Test and update the row pixels bit mask.
  */
-static inline uint32_t tmsTestRowBitsMask(VR_EMU_INST_ARG const uint32_t xPos, const uint32_t tilePixels, const uint32_t tileWidth, const bool update, const bool test)
+static inline uint32_t tmsTestRowBitsMask(VR_EMU_INST_ARG const uint32_t xPos, const uint32_t tilePixels, const uint32_t tileWidth, const bool update, const bool test, const bool testColl)
 {
   uint32_t rowBitsWord = xPos >> 5;
   uint32_t rowBitsWordBit = xPos & 0x1f;
 
   uint32_t validPixels = tilePixels >> rowBitsWordBit;
-  if (test) validPixels &= (~rowBits[rowBitsWord]);
+  if (testColl) validPixels &= ~rowSpriteBits[rowBitsWord];
+  if (test) validPixels &= ~rowBits[rowBitsWord];
   if (update) rowBits[rowBitsWord] |= validPixels;
-  if (test) validPixels <<= rowBitsWordBit;
-
+  if (test || testColl) validPixels <<= rowBitsWordBit;
+  
   if ((rowBitsWordBit + tileWidth) > 32)
   {
     ++rowBitsWord;
     rowBitsWordBit = 32 - rowBitsWordBit;
     uint32_t right = (tilePixels << rowBitsWordBit);
+
+    if (testColl) right &= ~rowSpriteBits[rowBitsWord];
     if (test) right &= ~rowBits[rowBitsWord];
+
     if (update) rowBits[rowBitsWord] |= right;
-    if (test) validPixels |= (right >> rowBitsWordBit);
+    if (test || testColl) validPixels |= (right >> rowBitsWordBit);
   }
 
-  return test ? validPixels : tilePixels;
+  return (test || testColl) ? validPixels : tilePixels;
 }
-
 
 /* lookup for combining ecm nibbles, returning 4 pixels */
 static uint32_t __aligned(8) ecmLookup[16 * 16 * 16];
@@ -808,7 +809,7 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
     }
 
     /* test and update the collision mask */
-    uint32_t validPixels = tmsTestCollisionMask(VR_EMU_INST xPos, pattMask, thisSpriteSizePx, true);
+    uint32_t validPixels = tmsTestCollisionMask(VR_EMU_INST xPos, pattMask, thisSpriteSizePx);
 
     /* if the result is different, we collided */
     if (validPixels != pattMask)
@@ -1170,7 +1171,7 @@ static inline void renderEcm0Tile(
 {
   /* was this pattern empty? we remember the last empty pattern.
      OR is the pixel mask full here? in either case, let's bail */
-  if ((!isTile2 && !tmsTestRowBitsMask(xPos, 0xff << 24, 8, false, true)))
+  if ((!isTile2 && !tmsTestRowBitsMask(xPos, 0xff << 24, 8, false, true, false)))
   {
     return;
   }
@@ -1203,8 +1204,7 @@ static inline void renderEcm0Tile(
   if (!fgColor) pattMask ^= patt;
 
   pattMask <<= offset;
-  pattMask = tmsTestCollisionMask(xPos, pattMask, 8, false);
-  pattMask = tmsTestRowBitsMask(xPos, pattMask, 8, true, !isTile2);
+  pattMask = tmsTestRowBitsMask(xPos, pattMask, 8, true, !isTile2, true);
 
     /* anything to draw?*/
   if (pattMask)
@@ -1243,7 +1243,7 @@ static inline void renderEcmTile(
   /* was this pattern empty? we remember the last empty pattern.
      OR is the pixel mask full here? in either case, let's bail */
   if (*lastEmpty == pattIdx ||
-      (!isTile2 && !tmsTestRowBitsMask(xPos, 0xff << (24 + startPattBit), 8 - startPattBit, false, true)))
+      (!isTile2 && !tmsTestRowBitsMask(xPos, 0xff << (24 + startPattBit), 8 - startPattBit, false, true, false)))
   {
     return;
   }
@@ -1304,27 +1304,21 @@ static inline void renderEcmTile(
     const uint32_t priority = alwaysOnTop || (colorByte & 0x80);
     const uint32_t offset = 24 + startPattBit;
     pattMask <<= offset;
-    if (!priority)
-    {
-      pattMask = tmsTestCollisionMask(xPos, pattMask, 8, false);
-    }
-    pattMask = tmsTestRowBitsMask(xPos, pattMask, 8, true, !isTile2);
+    pattMask = tmsTestRowBitsMask(xPos, pattMask, 8, true, !isTile2, !priority);
 
       /* anything to draw?*/
-    if (!pattMask)
+    if (pattMask)
     {
       /* we don't set lastEmpty here, because it had pixels.. they were just masked out */
-      return;
+      pattMask >>= offset;
+
+      const uint32_t palette = repeatedPalette[pal | ((colorByte & ecmColorMask) << ecmColorOffset)];
+      const uint32_t tileLeftPixels = ecmLookup[leftIndex] | palette;
+      const uint32_t tileRightPixels = ecmLookup[rightIndex] | palette;
+
+      quadPixels[0] = maskExpandNibbleToWord[pattMask >> 4] | tileLeftPixels;
+      quadPixels[1] = maskExpandNibbleToWord[pattMask & 0xf] | tileRightPixels;
     }
-
-    pattMask >>= offset;
-
-    const uint32_t palette = repeatedPalette[pal | ((colorByte & ecmColorMask) << ecmColorOffset)];
-    const uint32_t tileLeftPixels = ecmLookup[leftIndex] | palette;
-    const uint32_t tileRightPixels = ecmLookup[rightIndex] | palette;
-
-    renderEcmAlignedTile(quadPixels, tileLeftPixels, tileRightPixels, pattMask);
-    quadPixels += 2;
   }
   else
   {
@@ -1484,15 +1478,17 @@ static inline void __time_critical_func(vrEmuF18ATileScanLine)(VR_EMU_INST_ARG c
     for (int i = 2; i < 264 / 4; ++i, xPos += 4)
     {
       uint32_t quadPix = layerPixels[i];
-      if (~quadPix == 0) continue;
-      int8_t byte = quadPix & 0xff;
-      if (byte >= 0) pixels[xPos] = byte;
-      byte = quadPix >> 8;
-      if (byte >= 0) pixels[xPos + 1] = byte;
-      byte = quadPix >> 16;
-      if (byte >= 0) pixels[xPos + 2] = byte;
-      byte = quadPix >> 24;
-      if (byte >= 0) pixels[xPos + 3] = byte;
+      if (~quadPix)
+      {
+        int8_t byte = quadPix & 0xff;
+        if (byte >= 0) pixels[xPos] = byte;
+        byte = quadPix >> 8;
+        if (byte >= 0) pixels[xPos + 1] = byte;
+        byte = quadPix >> 16;
+        if (byte >= 0) pixels[xPos + 2] = byte;
+        byte = quadPix >> 24;
+        if (byte >= 0) pixels[xPos + 3] = byte;
+      }
     }
 
   }
@@ -1661,7 +1657,7 @@ static inline void __time_critical_func(renderBitmapLayer)(VR_EMU_INST_ARG uint8
       }
       if (writeMask && !maskPixelMask && currentMask)
       {
-        tmsTestRowBitsMask(maskX, currentMask, 32, true, false);
+        tmsTestRowBitsMask(maskX, currentMask, 32, true, false, false);
         maskX = xPos;
         maskPixelMask = 0x3 << 30;
         currentMask = 0;
@@ -1669,7 +1665,7 @@ static inline void __time_critical_func(renderBitmapLayer)(VR_EMU_INST_ARG uint8
     }
     if (writeMask && currentMask)
     {
-      tmsTestRowBitsMask(maskX, currentMask, xPos - maskX, true, false);
+      tmsTestRowBitsMask(maskX, currentMask, xPos - maskX, true, false, false);
     }
   }
   else // regular 2bpp pixels
@@ -1701,7 +1697,7 @@ static inline void __time_critical_func(renderBitmapLayer)(VR_EMU_INST_ARG uint8
 
       if (writeMask && !maskPixelMask && currentMask)
       {
-        tmsTestRowBitsMask(maskX, currentMask, 32, true, false);
+        tmsTestRowBitsMask(maskX, currentMask, 32, true, false, false);
         maskX = xPos;
         maskPixelMask = 0x1 << 31;
         currentMask = 0;
@@ -1709,7 +1705,7 @@ static inline void __time_critical_func(renderBitmapLayer)(VR_EMU_INST_ARG uint8
     }
     if (writeMask && currentMask)
     {
-      tmsTestRowBitsMask(maskX, currentMask, xPos - maskX, true, false);
+      tmsTestRowBitsMask(maskX, currentMask, xPos - maskX, true, false, false);
     }
   }
 }
