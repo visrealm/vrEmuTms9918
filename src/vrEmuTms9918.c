@@ -2151,10 +2151,10 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
     {
       uint8_t statReg = (value & 0x0f);
       tms9918->status [0x0F] = statReg;
-      if (value & 0x40) tms9918->startTime = time_us_64();    // reset
-      if (value & 0x20) tms9918->currentTime = time_us_64();  // snap      
+      if (value & 0x40) tms9918->startTime = time_us_32();    // reset
+      if (value & 0x20) tms9918->currentTime = time_us_32();  // snap      
       else if (value & 0x10) tms9918->startTime += (tms9918->stopTime - tms9918->startTime);
-      else tms9918->currentTime = tms9918->stopTime = time_us_64();
+      else tms9918->currentTime = tms9918->stopTime = time_us_32();
 
       if (statReg > 3 && statReg < 12)
       {
