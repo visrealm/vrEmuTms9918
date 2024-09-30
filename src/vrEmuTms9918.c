@@ -1973,11 +1973,18 @@ static  __attribute__((noinline)) void __time_critical_func(vrEmuTms9918Graphics
 
     const size_t pattRowOffset = pattIdx * PATTERN_BYTES;
     int8_t pattByte = patternTable[pattRowOffset];
-    const uint8_t colorByte = colorTable[pattRowOffset];
+    const uint8_t colorByte = colorTable[pattRowOffset];    
+    
+    // apply F18A palette. TODO put behind unlocked
+    uint8_t bgColor = colorByte & 0x0f;
+    uint8_t fgColor = colorByte >> 4;
+
+    if (bgColor) {bgColor |= (tms9918->registers[0x18] & 0x03) << 4;} else {bgColor = tmsMainBgColor(tms9918);}
+    if (fgColor) {fgColor |= (tms9918->registers[0x18] & 0x03) << 4;} else {fgColor = tmsMainBgColor(tms9918);}
 
     const uint8_t bgFgColor[] = {
-      tmsBgColor(tms9918, colorByte),
-      tmsFgColor(tms9918, colorByte)
+      bgColor,
+      fgColor
     };
 
     /* iterate over each bit of this pattern byte */
