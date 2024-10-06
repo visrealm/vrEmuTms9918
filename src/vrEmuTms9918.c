@@ -1965,6 +1965,7 @@ static  __attribute__((noinline)) void __time_critical_func(vrEmuTms9918Graphics
   const uint8_t* colorTable = tms9918->vram + tmsColorTableAddr(tms9918) + (pageOffset
     & ((tms9918->registers[TMS_REG_COLOR_TABLE] & 0x60) << 6)) + pattRow;
 
+  uint8_t palette = (tms9918->registers[0x18] & 0x03) << 4;
 
   /* iterate over each tile in this row */
   for (uint8_t tileX = 0; tileX < GRAPHICS_NUM_COLS; ++tileX)
@@ -1979,8 +1980,8 @@ static  __attribute__((noinline)) void __time_critical_func(vrEmuTms9918Graphics
     uint8_t bgColor = colorByte & 0x0f;
     uint8_t fgColor = colorByte >> 4;
 
-    if (bgColor) {bgColor |= (tms9918->registers[0x18] & 0x03) << 4;} else {bgColor = tmsMainBgColor(tms9918);}
-    if (fgColor) {fgColor |= (tms9918->registers[0x18] & 0x03) << 4;} else {fgColor = tmsMainBgColor(tms9918);}
+    if (bgColor) {bgColor |= palette;} else {bgColor = tmsMainBgColor(tms9918);}
+    if (fgColor) {fgColor |= palette;} else {fgColor = tmsMainBgColor(tms9918);}
 
     const uint8_t bgFgColor[] = {
       bgColor,
