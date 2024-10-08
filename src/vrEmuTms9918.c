@@ -947,9 +947,6 @@ static void __time_critical_func(vrEmuTms9918TextScanLine)(VR_EMU_INST_ARG uint8
 
   uint8_t* pixPtr = pixels;
 
-  /* fill the first and last 8 pixels with bg color */
-  tmsMemset(pixPtr, bgFgColor[0], TEXT_PADDING_PX, false);
-
   pixPtr += TEXT_PADDING_PX;
 
   for (uint8_t tileX = 0; tileX < TEXT_NUM_COLS; ++tileX)
@@ -961,8 +958,6 @@ static void __time_critical_func(vrEmuTms9918TextScanLine)(VR_EMU_INST_ARG uint8
       *pixPtr++ = bgFgColor[(pattByte >> pattBit) & 0x01];
     }
   }
-  /* fill the last 8 pixels with bg color */
-  tmsMemset(pixPtr, bgFgColor[0], TEXT_PADDING_PX, false);
 }
 
 static const uint8_t __aligned(4) maskText80Fg[] = { 0x00, 0x0f, 0xf0, 0xff };
