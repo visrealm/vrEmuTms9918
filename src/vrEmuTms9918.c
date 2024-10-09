@@ -459,7 +459,8 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
         tempStatus &= 0xe0;
         tempStatus |= STATUS_5S | spriteIdx;
       }
-      break;
+      
+      //break;  // allow more that 4 sprites
     }
 
     /* sprite is visible on this line */
