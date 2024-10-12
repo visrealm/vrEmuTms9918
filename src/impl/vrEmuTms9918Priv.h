@@ -93,6 +93,7 @@ struct vrEmuTMS9918_s
   bool isUnlocked;    // boolean version of lockedMask
   
   volatile uint8_t restart;
+  volatile uint8_t flash;
 
   /* palette writes are done in two stages too */
   uint8_t palWriteStage;

@@ -2142,6 +2142,11 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
     {
       tms9918->restart = 1;
     }
+    else if ((regIndex == 0x3F) && (value & 1))
+    {
+      if (tms9918->registers [0x38] == 0)
+        tms9918->flash = 1;
+    }
     else if (regIndex == 0x1e && value == 0)
     {
       tms9918->registers [0x1e] = MAX_SPRITES - 1;
