@@ -2183,12 +2183,12 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
     }
     else if (regIndex == 58)  // SR12 holds the value of the option in VR58 (options)
     {
-      TMS_STATUS(tms9918, 12) = TMS_REGISTER(tms9918, 58);//tms9918->config[TMS_REGISTER(tms9918, 58)];
+      TMS_STATUS(tms9918, 12) = tms9918->config[TMS_REGISTER(tms9918, 58)];
     }
     else if (regIndex == 59 && TMS_REGISTER(tms9918, 58) >= 8)  // option number in reg 58, value in 59 (options)
     {
       tms9918->config[TMS_REGISTER(tms9918, 58)] = value;
-      TMS_STATUS(tms9918, 12) = TMS_REGISTER(tms9918, 58);//value;
+      TMS_STATUS(tms9918, 12) = value;
       tms9918->configDirty = true;
     }
   }
