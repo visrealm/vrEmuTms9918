@@ -27,7 +27,7 @@ static VrEmuTms9918 __aligned(256) tms9918Inst;
 
 VrEmuTms9918* tms9918 = &tms9918Inst;
 
-// for a single scanline, re only support a single mode... so let's cache it.
+// for a single scanline, we only support a single mode... so let's cache it.
 vrEmuTms9918Mode tmsCachedMode = TMS_MODE_GRAPHICS_I;
 
 /* Function:  vrEmuTms9918Init
@@ -42,6 +42,9 @@ void __time_critical_func(vrEmuTms9918Init)()
   channel_config_set_write_increment(&cfg, true);
   channel_config_set_transfer_data_size(&cfg, DMA_SIZE_8);
   dma_channel_set_config(dma8, &cfg, false);
+
+  tms9918->maxScanlineSprites = MAX_SCANLINE_SPRITES;
+  tms9918->configDirty = false;
 
   vrEmuTms9918Reset(tms9918);
 }
@@ -264,7 +267,7 @@ VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918Reset)(VR_EMU_INS
   tmsMemset(&TMS_STATUS(tms9918, 0), 0, TMS_STATUS_REGISTERS, true);
   TMS_STATUS(tms9918, 0) = 0x1f;
   TMS_STATUS(tms9918, 1) = 0xE8;  // ID = F18A (0xE0) set 0x08 for anyone who cares it's not a real one
-  TMS_STATUS(tms9918, 14) = 0x19; // Version - Same as latest F18A's 1.9
+  TMS_STATUS(tms9918, 14) = 0x10; // Version
   tms9918->readAheadBuffer = 0;
 
   vdpRegisterReset(tms9918);
@@ -703,7 +706,7 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
     }
 
     /* have we exceeded the scanline sprite limit? */
-    if (++spritesShown > MAX_SCANLINE_SPRITES)
+    if (++spritesShown > tms9918->maxScanlineSprites)
     {
       if (((tempStatus & STATUS_5S) == 0) && 
           (!tms9918->isUnlocked || (TMS_REGISTER(tms9918, 0x32) & 0x08) == 0 || spritesShown > TMS_REGISTER(tms9918, 0x1e)))
@@ -2125,7 +2128,7 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
   {
     tms9918->unlockCount = 0;
     
-    if ((reg & ~tms9918->lockedMask) != 0x80) return; //ignore higher registers when unlocked
+    if ((reg & ~tms9918->lockedMask) != 0x80) return; //ignore higher registers when locked
 
     int regIndex = reg & tms9918->lockedMask; // was 0x07
     TMS_REGISTER(tms9918, regIndex) = value;
@@ -2177,6 +2180,16 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
         TMS_STATUS(tms9918, 0x0a) = to_quotient_u32(milli) & 0x00ff;
         TMS_STATUS(tms9918, 0x0b) = to_quotient_u32(milli) >> 8;
       }
+    }
+    else if (regIndex == 58)  // SR12 holds the value of the option in VR58 (options)
+    {
+      TMS_STATUS(tms9918, 12) = TMS_REGISTER(tms9918, 58);//tms9918->config[TMS_REGISTER(tms9918, 58)];
+    }
+    else if (regIndex == 59 && TMS_REGISTER(tms9918, 58) >= 8)  // option number in reg 58, value in 59 (options)
+    {
+      tms9918->config[TMS_REGISTER(tms9918, 58)] = value;
+      TMS_STATUS(tms9918, 12) = TMS_REGISTER(tms9918, 58);//value;
+      tms9918->configDirty = true;
     }
   }
 }

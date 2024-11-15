@@ -161,10 +161,14 @@ struct vrEmuTMS9918_s
   /* palette writes are done in two stages too */
   uint8_t palWriteStage;
   uint8_t palWriteStage0Value;
+  uint8_t maxScanlineSprites;
 
   uint32_t startTime;
   uint32_t stopTime;
   uint32_t currentTime;
+
+  uint8_t config[256];
+  bool configDirty;
 
   bool scanlineHasSprites;
 };
