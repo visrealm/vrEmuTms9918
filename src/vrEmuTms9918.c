@@ -240,7 +240,7 @@ static void __attribute__ ((noinline)) vdpRegisterReset(VrEmuTms9918* tms9918)
   tms9918->restart = 0;
   tms9918->unlockCount = 0;
   tms9918->lockedMask = 0x07;
-  tmsMemset(&TMS_REGISTER(tms9918, 0), 0, sizeof(TMS_REGISTERS), true);
+  tmsMemset(&TMS_REGISTER(tms9918, 0), 0, TMS_REGISTERS, true);
   TMS_REGISTER(tms9918, 0x01) = 0x40;
   TMS_REGISTER(tms9918, 0x03) = 0x10;
   TMS_REGISTER(tms9918, 0x04) = 0x01;
@@ -706,7 +706,7 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
     }
 
     /* have we exceeded the scanline sprite limit? */
-    if (++spritesShown > tms9918->maxScanlineSprites)
+    if (++spritesShown > MAX_SCANLINE_SPRITES)
     {
       if (((tempStatus & STATUS_5S) == 0) && 
           (!tms9918->isUnlocked || (TMS_REGISTER(tms9918, 0x32) & 0x08) == 0 || spritesShown > TMS_REGISTER(tms9918, 0x1e)))
@@ -715,7 +715,8 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
         tempStatus |= STATUS_5S | spriteIdx;
       }
 
-      if (spritesShown > TMS_REGISTER(tms9918, 0x1e))
+      if (spritesShown > TMS_REGISTER(tms9918, 0x1e) ||
+          spritesShown > tms9918->maxScanlineSprites)
         break;
     }
 
