@@ -43,9 +43,6 @@ void __time_critical_func(vrEmuTms9918Init)()
   channel_config_set_transfer_data_size(&cfg, DMA_SIZE_8);
   dma_channel_set_config(dma8, &cfg, false);
 
-  tms9918->maxScanlineSprites = MAX_SCANLINE_SPRITES;
-  tms9918->configDirty = false;
-
   vrEmuTms9918Reset(tms9918);
 }
 
@@ -251,6 +248,8 @@ static void __attribute__ ((noinline)) vdpRegisterReset(VrEmuTms9918* tms9918)
   TMS_REGISTER(tms9918, 0x30) = 1; // vram address increment register
   TMS_REGISTER(tms9918, 0x33) = MAX_SPRITES; // Sprites to process
   TMS_REGISTER(tms9918, 0x36) = 0x40;
+  
+  tms9918->configDirty = true; // so values get applied
 }
 
 
@@ -715,8 +714,7 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
         tempStatus |= STATUS_5S | spriteIdx;
       }
 
-      if (spritesShown > TMS_REGISTER(tms9918, 0x1e) ||
-          spritesShown > tms9918->maxScanlineSprites)
+      if (spritesShown > TMS_REGISTER(tms9918, 0x1e))
         break;
     }
 
