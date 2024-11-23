@@ -273,5 +273,11 @@ bool vrEmuTms9918DisplayEnabled(VR_EMU_INST_ONLY_ARG);
 VR_EMU_TMS9918_DLLEXPORT
 vrEmuTms9918Mode vrEmuTms9918DisplayMode(VR_EMU_INST_ONLY_ARG);
 
+/* Function:  vrEmuTms9918DefaultPalette
+  * --------------------
+  * a default palette value 0x0rgb
+  */
+VR_EMU_TMS9918_DLLEXPORT
+uint16_t vrEmuTms9918DefaultPalette(int index);
 
 #endif // _VR_EMU_TMS9918_H_

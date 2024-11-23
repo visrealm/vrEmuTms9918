@@ -220,15 +220,16 @@ static void tmsMemset(uint8_t* ptr, uint8_t val8, int count, bool wait)
   if (wait) dma_channel_wait_for_finish_blocking(dma8);
 }
 
+// default palette 0xARGB
 static const uint16_t defaultPalette[] = {
   //-- Palette 0, Deafult TMS9918A palette
-  0x000, 0x000, 0x2C3, 0x5D6, 0x54F, 0x76F, 0xD54, 0x4EF, 0xF54, 0xF76, 0xDC3, 0xED6, 0x2B2, 0xC5C, 0xCCC, 0xFFF,
+  0x0000, 0xF000, 0xF2C3, 0xF5D6, 0xF54F, 0xF76F, 0xFD54, 0xF4EF, 0xFF54, 0xFF76, 0xFDC3, 0xFED6, 0xF2B2, 0xFC5C, 0xFCCC, 0xFFFF,
   //-- Palette 1, ECM1 (0 index is always 000) version of palette 0
-  0x000, 0x2C3, 0x000, 0x54F, 0x000, 0xD54, 0x000, 0x4EF, 0x000, 0xCCC, 0x000, 0xDC3, 0x000, 0xC5C, 0x000, 0xFFF,
+  0x0000, 0xF2C3, 0xF000, 0xF54F, 0xF000, 0xFD54, 0xF000, 0xF4EF, 0xF000, 0xFCCC, 0xF000, 0xFDC3, 0xF000, 0xFC5C, 0xF000, 0xFFFF,
   //-- Palette 2, CGA colors
-  0x000, 0x00A, 0x0A0, 0x0AA, 0xA00, 0xA0A, 0xA50, 0xAAA, 0x555, 0x55F, 0x5F5, 0x5FF, 0xF55, 0xF5F, 0xFF5, 0xFFF,
+  0x0000, 0xF00A, 0xF0A0, 0xF0AA, 0xFA00, 0xFA0A, 0xFA50, 0xFAAA, 0xF555, 0xF55F, 0xF5F5, 0xF5FF, 0xFF55, 0xFF5F, 0xFFF5, 0xFFFF,
   //-- Palette 3, ECM1 (0 index is always 000) version of palette 2
-  0x000, 0x555, 0x000, 0x00A, 0x000, 0x0A0, 0x000, 0x0AA, 0x000, 0xA00, 0x000, 0xA0A, 0x000, 0xA50, 0x000, 0xFFF
+  0x0000, 0xF555, 0xF000, 0xF00A, 0xF000, 0xF0A0, 0xF000, 0xF0AA, 0xF000, 0xFA00, 0xF000, 0xFA0A, 0xF000, 0xFA50, 0xF000, 0xFFFF
 };
 
 static void __attribute__ ((noinline)) vdpRegisterReset(VrEmuTms9918* tms9918)
@@ -1940,7 +1941,7 @@ static uint8_t __time_critical_func(vrEmuTms9918GraphicsIScanLine)(VR_EMU_INST_A
  * generate a Graphics II mode scanline
  */
 static  __attribute__((noinline)) void __time_critical_func(vrEmuTms9918GraphicsIIScanLine)(VR_EMU_INST_ARG uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
-{
+{  
   const uint8_t tileY = y >> 3;   /* which name table row (0 - 23) */
   const uint8_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
 
@@ -2071,6 +2072,14 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ScanLine)(VR_E
       case TMS_MODE_GRAPHICS_II:
         vrEmuTms9918GraphicsIIScanLine(VR_EMU_INST y, pixels);
         tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
+
+        if (tms9918->isUnlocked)
+        {
+         // const bool tilesDisabled = TMS_REGISTER(tms9918, 0x32) & 0x10;
+
+          vrEmuTms9918BitmapLayerScanLine(VR_EMU_INST y, pixels);
+        }
+
         break;
 
       case TMS_MODE_TEXT:
@@ -2144,8 +2153,13 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
     {
       tms9918->restart = 1;
     }
-    else if ((regIndex == 0x3F) && (value & 1))
+    else if ((regIndex == 0x3F) && (value & 1)) // firmware update
     {
+      // b7      : 0 = idle:   1 = execute
+      // b6      : 0 = verify: 1 = write
+      // b5 - b0 : address to read firmware data (256 byte boundaries)
+      //           reads one UF2 frame (512 bytes)
+
       if (TMS_REGISTER(tms9918, 0x38) == 0)
         tms9918->flash = 1;
     }
@@ -2223,4 +2237,14 @@ VR_EMU_TMS9918_DLLEXPORT
 vrEmuTms9918Mode __time_critical_func(vrEmuTms9918DisplayMode)(VR_EMU_INST_ONLY_ARG)
 {
   return tmsCachedMode;
+}
+
+/* Function:  vrEmuTms9918DefaultPalette
+  * --------------------
+  * a default palette value 0x0rgb
+  */
+VR_EMU_TMS9918_DLLEXPORT
+uint16_t vrEmuTms9918DefaultPalette(int index)
+{
+  return defaultPalette[index & 0x3f];
 }
