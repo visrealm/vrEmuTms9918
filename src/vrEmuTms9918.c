@@ -16,6 +16,8 @@
 #include "pico/divider.h"
 #include "hardware/dma.h"
 
+#include <string.h>
+
 
 static unsigned int dma8 = 4;
 static __attribute__((section(".scratch_x.buffer"))) uint32_t bg; 
@@ -238,7 +240,7 @@ static void __attribute__ ((noinline)) vdpRegisterReset(VrEmuTms9918* tms9918)
   tms9918->restart = 0;
   tms9918->unlockCount = 0;
   tms9918->lockedMask = 0x07;
-  tmsMemset(&TMS_REGISTER(tms9918, 0), 0, TMS_REGISTERS, true);
+  memset(&TMS_REGISTER(tms9918, 0), 0, TMS_REGISTERS);
   TMS_REGISTER(tms9918, 0x01) = 0x40;
   TMS_REGISTER(tms9918, 0x03) = 0x10;
   TMS_REGISTER(tms9918, 0x04) = 0x01;
@@ -264,14 +266,14 @@ VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918Reset)(VR_EMU_INS
   tms9918->currentAddress = 0;
   tms9918->gpuAddress = 0xFFFF; // "Odd" don't start value
   tms9918->regWriteStage = 0;
-  tmsMemset(&TMS_STATUS(tms9918, 0), 0, TMS_STATUS_REGISTERS, true);
+  memset(&TMS_STATUS(tms9918, 0), 0, TMS_STATUS_REGISTERS);
   TMS_STATUS(tms9918, 0) = 0x1f;
   TMS_STATUS(tms9918, 1) = 0xE8;  // ID = F18A (0xE0) set 0x08 for anyone who cares it's not a real one
   TMS_STATUS(tms9918, 14) = 0x10; // Version
   tms9918->readAheadBuffer = 0;
 
   vdpRegisterReset(tms9918);
-  TMS_REGISTER(tms9918, 0x01) = 0x00; // turn display off
+  TMS_REGISTER(tms9918, 0x01) = 0x40; // turn display off
   TMS_REGISTER(tms9918, 0x07) = 0x00;
   tmsCachedMode = TMS_MODE_GRAPHICS_I;
 
