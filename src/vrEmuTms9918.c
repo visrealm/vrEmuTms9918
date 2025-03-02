@@ -228,6 +228,8 @@ VR_EMU_TMS9918_DLLEXPORT void vrEmuTms9918Reset(VR_EMU_INST_ONLY_ARG)
   tms9918->regWriteStage = 0;
   tms9918->status = 0;
   tms9918->readAheadBuffer = 0;
+  tms9918->maxScanlineSprites = MAX_SCANLINE_SPRITES;
+
   tmsMemset(tms9918->registers, 0, sizeof(tms9918->registers));
 
   /* ram intentionally left in unknown state */
@@ -452,7 +454,7 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
     }
 
     /* have we exceeded the scanline sprite limit? */
-    if (++spritesShown > MAX_SCANLINE_SPRITES)
+    if (++spritesShown > tms9918->maxScanlineSprites)
     {
       if ((tempStatus & STATUS_5S) == 0)
       {
@@ -460,7 +462,7 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites)(VR_EMU_INST_ARG u
         tempStatus |= STATUS_5S | spriteIdx;
       }
       
-      //break;  // allow more that 4 sprites
+      break;  // allow more that 4 sprites
     }
 
     /* sprite is visible on this line */

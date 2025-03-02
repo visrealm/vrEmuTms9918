@@ -78,6 +78,9 @@ struct vrEmuTMS9918_s
   /* current display mode */
   vrEmuTms9918Mode mode;
 
+  /* maximum number of sprites on a scanline */
+  int maxScanlineSprites;
+
   /* cached values */
   uint8_t spriteSize;
   bool spriteMag;
