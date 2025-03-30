@@ -112,7 +112,7 @@ typedef enum
   * create a new TMS9918
   */
 VR_EMU_TMS9918_DLLEXPORT
-VrEmuTms9918* vrEmuTms9918New();
+VrEmuTms9918* vrEmuTms9918New(void);
 
 /* Function:  vrEmuTms9918Reset
   * --------------------

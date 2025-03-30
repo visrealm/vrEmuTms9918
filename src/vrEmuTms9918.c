@@ -237,7 +237,7 @@ static inline vrEmuTms9918Color tmsBgColor(VrEmuTms9918* tms9918, uint8_t colorB
  * ----------------------------------------
  * create a new TMS9918
  */
-VR_EMU_TMS9918_DLLEXPORT VrEmuTms9918* vrEmuTms9918New()
+VR_EMU_TMS9918_DLLEXPORT VrEmuTms9918* vrEmuTms9918New(void)
 {
   VrEmuTms9918* tms9918 = (VrEmuTms9918*)malloc(sizeof(VrEmuTms9918));
   if (tms9918 != NULL)
