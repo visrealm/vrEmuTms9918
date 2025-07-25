@@ -171,6 +171,11 @@ struct vrEmuTMS9918_s
   bool configDirty;
 
   bool scanlineHasSprites;
+
+  /* Aligned tile rendering optimization buffers */
+  uint8_t __aligned(4) tileLayer1Buffer[TMS9918_PIXELS_X];
+  uint8_t __aligned(4) tileLayer2Buffer[TMS9918_PIXELS_X]; 
+  uint32_t __aligned(4) layerSelectionMask[TMS9918_PIXELS_X / 32];  // 1 bit per pixel: 0=T2, 1=T1
 };
 
 #if VR_EMU_TMS9918_SINGLE_INSTANCE
