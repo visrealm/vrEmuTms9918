@@ -462,6 +462,27 @@ uint32_t tileWidth, BitMask rowBitsMask)
   }
 }
 
+/* Function:  tmsClearRowBitsMask
+  * ----------------------------------------
+  * Clear the row pixels bit mask.
+  */
+static inline void tmsClearRowBitsMask(const uint32_t xPos, const uint32_t tilePixels, const
+uint32_t tileWidth, BitMask rowBitsMask)
+{
+  uint32_t rowBitsWord = xPos >> 5;
+  uint32_t rowBitsWordBit = xPos & 0x1f;
+
+  uint32_t validPixels = tilePixels >> rowBitsWordBit;
+  rowBitsMask[rowBitsWord] &= ~validPixels;
+
+  rowBitsWordBit = 32 - rowBitsWordBit;
+  if (rowBitsWordBit < tileWidth) {
+    ++rowBitsWord;
+    uint32_t right = (tilePixels << rowBitsWordBit);
+    rowBitsMask[rowBitsWord] &= ~right;
+  }
+}
+
 /* Function:  tmsTestRowBitsMask
   * ----------------------------------------
   * Test against the row pixels bit mask.
@@ -772,6 +793,23 @@ void initLookups()
   lookupsReady = true;
 }
 
+static inline uint32_t calculateEcmIndex(const uint32_t ecm, const uint32_t sb0, const uint32_t sb1, const uint32_t sb2)
+{
+  uint32_t ecmIndex = 0;
+  switch (ecm)
+  {
+    case 3:
+      ecmIndex |= (sb2 >> 28) << 8;
+      // fallthrough
+    case 2:
+      ecmIndex |= (sb1 >> 28) << 4;
+      // fallthrough
+    default:
+      ecmIndex |= sb0 >> 28;
+  }
+  return ecmIndex;
+}
+
 static inline void loadSpriteData(uint32_t *spriteBits, uint32_t pattOffset, uint32_t *pattMask, const uint32_t ecm, const uint32_t ecmOffset, const bool flipX, const bool sprite16)
 {
   int i = 0;
@@ -991,7 +1029,7 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
     }
 
     /* test and update the collision mask */
-    uint32_t validPixels = tmsTestCollisionMask(VR_EMU_INST xPos, pattMask, thisSpriteSizePx);
+    int32_t validPixels = tmsTestCollisionMask(VR_EMU_INST xPos, pattMask, thisSpriteSizePx);
 
     /* if the result is different, we collided */
     if (validPixels != pattMask)
@@ -1011,64 +1049,49 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
               to improve performance for each case (reduce branches in loops) */
         uint32_t quadPal = repeatedPalette[spriteColor];
 
-        bool singlePix = spriteMag && thisSprite16;
-
-         // 16px magnified is separate because it's harder. we only have 32 bits to play with, so to word align it, we need to go to 64 bits
-        if (singlePix)
+         // 16px magnified - render to aligned buffer then copy
+        if (spriteMag)
         {
-          register uint32_t sb0 = spriteBits[0];
-          register uint32_t sb1 = spriteBits[1];
-          register uint32_t sb2 = spriteBits[2];
+          // use aligned buffer for efficient 4-pixel processing
+          static uint8_t alignedBuffer[16] __attribute__((aligned(4)));
+          uint32_t* quadBuffer = (uint32_t*)alignedBuffer;
+          
+          uint32_t tempValidPixels = validPixels;
+          int bufferPos = 0;
 
-          while (validPixels)
+          while (tempValidPixels)
           {
-            /* output the sprite pixels 8 at a time (4x magnified pixels) */
-            uint32_t chunkMask = validPixels >> 24;
+            /* process 4 pixels at a time */
+            uint32_t chunkMask = tempValidPixels >> 24;
             if (chunkMask)
             {
-              uint32_t ecmIndex = 0;
-              switch (ecm)
-              {
-                case 3:
-                  ecmIndex = (sb2 >> 28) << 8;
-                  // fallthrough
-                case 2:
-                  ecmIndex |= (sb1 >> 28) << 4;
-                  // fallthrough
-                default:
-                  ecmIndex |= sb0 >> 28;
-              }
-
-              uint32_t color = ecmLookup[ecmIndex] | quadPal;
-
-              uint8_t *p = pixels + xPos;
-              if (chunkMask & 0x80) p[0] = color;
-              if (chunkMask & 0x40) p[1] = color;
-              color >>= 8;
-              if (chunkMask & 0x20) p[2] = color;
-              if (chunkMask & 0x10) p[3] = color;
-              color >>= 8;
-              if (chunkMask & 0x8) p[4] = color;
-              if (chunkMask & 0x4) p[5] = color;
-              color >>= 8;
-              if (chunkMask & 0x2) p[6] = color;
-              if (chunkMask & 0x1) p[7] = color;
+              // render 4 pixels to aligned buffer
+              uint32_t ecmIndex = calculateEcmIndex(ecm, spriteBits[0], spriteBits[1], spriteBits[2]);
+              quadBuffer[bufferPos] = ecmLookup[ecmIndex] | quadPal;
             }
-            sb2 <<= 4;
-            sb1 <<= 4;
-            sb0 <<= 4;
-            validPixels <<= 8;
-            xPos += 8;
+            else
+            {
+              quadBuffer[bufferPos] = 0;              
+            }
+            spriteBits[2] <<= 4;
+            spriteBits[1] <<= 4;
+            spriteBits[0] <<= 4;
+            tempValidPixels <<= 8;
+            ++bufferPos;
+          }
+          
+          // copy from aligned buffer to final pixels with collision mask
+          int i = 0;
+          while (validPixels)
+          {
+            if (validPixels < 0) pixels[xPos + i] = alignedBuffer[i >> 1];
+            validPixels <<= 1; ++i;
+            if (validPixels < 0) pixels[xPos + i] = alignedBuffer[i >> 1];
+            validPixels <<= 1; ++i;
           }
         }
-        else  // regular ecm sprite (8 or 16px, non-magnified) or 8px magnified
+        else  // regular ecm sprite (8 or 16px, non-magnified)
         {
-          if (spriteMag)
-          {
-            spriteBits[2] = doubledBits[spriteBits[2] >> 24] << 16;
-            spriteBits[1] = doubledBits[spriteBits[1] >> 24] << 16;
-            spriteBits[0] = doubledBits[spriteBits[0] >> 24] << 16;
-          }
 
           // get him to be word aligned so we can smash out 4 pixels at a time
           uint32_t quadOffset = xPos >> 2;
@@ -1086,19 +1109,7 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
             uint32_t chunkMask = validPixels >> 28;
             if (chunkMask)
             {
-              uint32_t ecmIndex = 0;
-              switch (ecm)
-              {
-                case 3:
-                  ecmIndex |= (spriteBits[2] >> 28) << 8;
-                  // fallthrough
-                case 2:
-                  ecmIndex |= (spriteBits[1] >> 28) << 4;
-                  // fallthrough
-                default:
-                  ecmIndex |= spriteBits[0] >> 28;
-              }
-
+              uint32_t ecmIndex = calculateEcmIndex(ecm, spriteBits[0], spriteBits[1], spriteBits[2]);
               uint32_t color = ecmLookup[ecmIndex] | quadPal;
 
               uint32_t maskQuad = maskExpandNibbleToWordRev[chunkMask];
@@ -1510,6 +1521,7 @@ static inline void writeToAlignedBuffer(uint8_t* buffer, uint32_t xPos, const ui
 static inline void renderEcmTileToAlignedBuffer(
   VR_EMU_INST_ARG uint8_t* buffer,
   const uint32_t xPos,
+  const uint32_t pixelOffset,
   const uint8_t pattIdx,
   const uint8_t patternTable[],
   const uint32_t colorTableAddr,
@@ -1519,7 +1531,6 @@ static inline void renderEcmTileToAlignedBuffer(
   const uint32_t ecmColorOffset,
   const uint32_t pal,
   const bool attrPerPos,
-  const uint32_t rowOffset,
   const uint32_t pattRow,
   const uint32_t tileIndex,
   uint32_t *lastEmpty,
@@ -1581,20 +1592,11 @@ static inline void renderEcmTileToAlignedBuffer(
       pattMask = reversedBits[pattMask];
     }
 
-    if (!pattMask)
-    {
-      /* we don't set lastEmpty here, because it had pixels.. they were just masked out */
-      // For T1, write transparent pixels (0) instead of skipping
-      if (!isTile2)
-      {
-        writeToAlignedBuffer(buffer, xPos, zeroPixels);
-      }
-      return;
-    }
     const uint32_t priority = alwaysOnTop || (colorByte & 0x80);
     pattMask <<= 24;
 
     if (isTile2) tmsUpdateRowBitsMaskAligned(xPos, pattMask, tms9918->layerSelectionMask);
+    if (priority && tms9918->scanlineHasSprites) tmsClearRowBitsMask(xPos - pixelOffset, pattMask, 8, rowSpriteBits);
 
     switch (ecm)
     {
@@ -1641,12 +1643,8 @@ static inline void __time_critical_func(vrEmuF18ATileScanLine)(VR_EMU_INST_ARG c
   const uint32_t pattRow = y & 0x07;  /* which pattern row (0 - 7) */
   const uint8_t* patternTable = tms9918->vram.bytes + tmsPatternTableAddr(tms9918);
 
-  // for the entire scanline, we need to shift our 4-pixel words by this much
-  uint32_t lastPattId = -1;
-
   /* iterate over each tile in this row - if' we're scrolling, add one */
   uint32_t numTiles = GRAPHICS_NUM_COLS + 1;
-  //if (startPattBit != 0) numTiles++;  // Add extra tile for scrolling
 
   /* keep in mind when using this... the byte order will be reversed */
   uint32_t *quadPixels = (uint32_t*)pixels;
@@ -1687,8 +1685,8 @@ static inline void __time_critical_func(vrEmuF18ATileScanLine)(VR_EMU_INST_ARG c
           tileIndex = 0;
         }
         const uint8_t pattIdx = tms9918->vram.bytes[rowNamesAddr + tileIndex];
-        renderEcmTileToAlignedBuffer(VR_EMU_INST targetBuffer, xPos, pattIdx, patternTable, colorTableAddr, ecm, ecmOffset,
-                                    ecmColorMask, ecmColorOffset, pal, attrPerPos, rowOffset, pattRow, tileIndex++, 
+        renderEcmTileToAlignedBuffer(VR_EMU_INST targetBuffer, xPos, startPattBit, pattIdx, patternTable, colorTableAddr, ecm, ecmOffset,
+                                    ecmColorMask, ecmColorOffset, pal, attrPerPos, pattRow, tileIndex++, 
                                     &lastEmpty, isTile2, alwaysOnTop);
         xPos += 8;
       }
@@ -2053,8 +2051,9 @@ static inline void compositeAlignedTileBuffersWithDMA(VR_EMU_INST_ARG uint8_t pi
   for (int maskWord = 0; maskWord < TMS9918_PIXELS_X / 32; maskWord++)
   {
     int32_t mask = selectionMask[maskWord];
+    int32_t spriteMask = rowSpriteBits[maskWord];
     
-    if (mask == 0)
+    if (mask == 0 && spriteMask == 0)
     {
       // All T1 pixels - use DMA copy for speed  
       dma_channel_wait_for_finish_blocking(dma32inc);
@@ -2065,7 +2064,7 @@ static inline void compositeAlignedTileBuffersWithDMA(VR_EMU_INST_ARG uint8_t pi
       layer2 += 32;
       pixels += 32;
   }
-    else if (mask == 0xFFFFFFFF)
+    else if (mask == 0xFFFFFFFF && spriteMask == 0)
     {
       // All T2 pixels - use DMA copy for speed
       dma_channel_wait_for_finish_blocking(dma32inc);
@@ -2082,10 +2081,14 @@ static inline void compositeAlignedTileBuffersWithDMA(VR_EMU_INST_ARG uint8_t pi
       for (int i = 0; i < 8; i++)
       {        
         // process 4 pixels using individual bytes but fewer iterations
-        pixels[0] = mask < 0 ? layer2[0] : layer1[0]; mask <<= 1;
-        pixels[1] = mask < 0 ? layer2[1] : layer1[1]; mask <<= 1;
-        pixels[2] = mask < 0 ? layer2[2] : layer1[2]; mask <<= 1;
-        pixels[3] = mask < 0 ? layer2[3] : layer1[3]; mask <<= 1;
+        if (spriteMask >= 0) {pixels[0] = mask < 0 ? layer2[0] : layer1[0];}
+        mask <<= 1; spriteMask <<= 1;
+        if (spriteMask >= 0) { pixels[1] = mask < 0 ? layer2[1] : layer1[1]; }
+        mask <<= 1; spriteMask <<= 1;
+        if (spriteMask >= 0) { pixels[2] = mask < 0 ? layer2[2] : layer1[2]; }
+        mask <<= 1; spriteMask <<= 1;
+        if (spriteMask >= 0) { pixels[3] = mask < 0 ? layer2[3] : layer1[3]; }
+        mask <<= 1; spriteMask <<= 1;
         
         pixels += 4;
         layer1 += 4;
@@ -2281,9 +2284,9 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ScanLine)(VR_E
   tmsCachedMode = tmsMode(tms9918);
 
   /* clear the buffer with background color */
-  //bg = repeatedPalette[tmsMainBgColor(tms9918)];
-  //if (tmsCachedMode == TMS_MODE_TEXT80) bg |= bg << 4;
-  //dma_channel_set_write_addr(dma32noinc, pixels, true);
+  bg = repeatedPalette[tmsMainBgColor(tms9918)];
+  if (tmsCachedMode == TMS_MODE_TEXT80) bg |= bg << 4;
+  dma_channel_set_write_addr(dma32noinc, pixels, true);
 
   bool dispActive = (TMS_REGISTER(tms9918, TMS_REG_1) & TMS_R1_DISP_ACTIVE);
 
