@@ -173,9 +173,10 @@ struct vrEmuTMS9918_s
   bool scanlineHasSprites;
 
   /* Aligned tile rendering optimization buffers - 33 tiles (264 pixels) for scroll offset */
-  uint8_t __aligned(4) tileLayer1Buffer[TMS9918_PIXELS_X + 8];  // 256 + 8 = 264 pixels (33 tiles)
   uint8_t __aligned(4) tileLayer2Buffer[TMS9918_PIXELS_X + 8];  // 256 + 8 = 264 pixels (33 tiles)
-  uint32_t __aligned(4) layerSelectionMask[TMS9918_PIXELS_X / 32];  // 1 bit per pixel: 0=T2, 1=T1
+  uint8_t __aligned(4) tileLayer1Buffer[TMS9918_PIXELS_X + 8];  // 256 + 8 = 264 pixels (33 tiles)
+  uint32_t __aligned(4) layerSelectionMask[9];  // 1 bit per pixel: 0=T1, 1=T2
+  uint32_t __aligned(4) finalMask[9];  // 1 bit per pixel: 0=T1, 1=T2
 };
 
 #if VR_EMU_TMS9918_SINGLE_INSTANCE
