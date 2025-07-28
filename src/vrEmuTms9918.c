@@ -528,16 +528,9 @@ BitMask rowBitsMask)
   * ----------------------------------------
   * Test against the row pixels bit mask (aligned - no word boundary crossing).
   */
-static inline uint32_t tmsTestRowBitsMaskAligned(const uint32_t xPos, const uint32_t tilePixels,
-const BitMask rowBitsMask)
+static inline uint32_t tmsTestRowBitsMaskAligned(const uint32_t xPos, const uint32_t tilePixels, const BitMask rowBitsMask)
 {
-  uint32_t rowBitsWordBit = xPos & 0x1f;
-
-  uint32_t validPixels = tilePixels >> rowBitsWordBit;
-  validPixels &= ~rowBitsMask[xPos >> 5];
-  validPixels <<= rowBitsWordBit;
-
-  return validPixels;
+  return tilePixels & ~(rowBitsMask[xPos >> 5] << (xPos & 0x1f));
 }
 
 /* Function:  tmsTestAndUpdateRowBitsMaskAligned
@@ -564,15 +557,19 @@ static void tmsCopyAlignMask(BitMask dstMask, const BitMask srcMask, int pixelSh
 {
   if (pixelShift == 0)
   {
-    memcpy(dstMask, srcMask, 32);
+    // Use DMA for aligned copy
+    dma_channel_set_read_addr(dma32inc, srcMask, false);
+    dma_channel_set_write_addr(dma32inc, dstMask, false);
+    dma_channel_set_trans_count(dma32inc, 36, true);  // 36 bytes, start transfer
     return;
   }
 
   if (pixelShift > 0)
   {
-    // Right shift
+    // Right shift - carry flows left to right (low to high index)
     uint32_t carry = 0;
-    for (int i = 8; i >= 0; i--) {
+    for (int i = 0; i < 9; i++)  // LOW to HIGH
+    {
       uint32_t word = srcMask[i];
       dstMask[i] = (word >> pixelShift) | carry;
       carry = word << (32 - pixelShift);
@@ -580,10 +577,11 @@ static void tmsCopyAlignMask(BitMask dstMask, const BitMask srcMask, int pixelSh
   }
   else
   {
-    // Left shift
+    // Left shift - carry flows right to left (high to low index)
     pixelShift = -pixelShift;
     uint32_t carry = 0;
-    for (int i = 0; i < 9; i++) {
+    for (int i = 8; i >= 0; i--)  // HIGH to LOW
+    {
       uint32_t word = srcMask[i];
       dstMask[i] = (word << pixelShift) | carry;
       carry = word >> (32 - pixelShift);
@@ -2328,39 +2326,35 @@ static inline void compositeAlignedTileBuffersWithDMA(VR_EMU_INST_ARG uint8_t pi
   // Process in 32-pixel chunks (1 mask word at a time)
   for (int maskWord = 0; maskWord < TMS9918_PIXELS_X / 32; maskWord++)
   {
-    const uint32_t mask = selectionMask[maskWord];
-    const uint32_t pixelStart = maskWord * 32;
+    int32_t mask = selectionMask[maskWord];
     
     if (mask == 0)
     {
       // All T1 pixels - use DMA copy for speed  
       dma_channel_wait_for_finish_blocking(dma32inc);
-      dma_channel_set_read_addr(dma32inc, &layer1[pixelStart], false);
-      dma_channel_set_write_addr(dma32inc, &pixels[pixelStart], false);
+      dma_channel_set_read_addr(dma32inc, layer1, false);
+      dma_channel_set_write_addr(dma32inc, pixels, false);
       dma_channel_set_trans_count(dma32inc, 32, true);  // 32 pixels = 8 words
     }
     else if (mask == 0xFFFFFFFF)
     {
       // All T2 pixels - use DMA copy for speed
       dma_channel_wait_for_finish_blocking(dma32inc);
-      dma_channel_set_read_addr(dma32inc, &layer2[pixelStart], false);
-      dma_channel_set_write_addr(dma32inc, &pixels[pixelStart], false);
+      dma_channel_set_read_addr(dma32inc, layer2, false);
+      dma_channel_set_write_addr(dma32inc, pixels, false);
       dma_channel_set_trans_count(dma32inc, 32, true);  // 32 pixels = 8 words
     }
     else
     {
       // Mixed - use CPU compositing for this 32-pixel region
-      uint32_t pixelIndex = pixelStart;
-      for (int i = 31; i >= 0; --i, ++pixelIndex)
+      for (int i = 0; i < 32; ++i, mask <<= 1)
       {
-        const uint32_t maskBit = 1U << i;
-        
-        if (mask & maskBit)
-          pixels[pixelIndex] = layer2[pixelIndex];  // T1 pixel
-        else
-          pixels[pixelIndex] = layer1[pixelIndex];  // T2 pixel
+         pixels[i] = mask < 0 ? layer2[i] : layer1[i];  // T2 pixel
       }
     }
+    layer1 += 32;
+    layer2 += 32;
+    pixels += 32;
   }
   
   dma_channel_wait_for_finish_blocking(dma32noinc);
@@ -2545,6 +2539,7 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ScanLine)(VR_E
     cfg = dma_channel_get_default_config(dma32inc);
 	  channel_config_set_write_increment(&cfg, true);
 	  channel_config_set_transfer_data_size(&cfg, DMA_SIZE_8);
+	  channel_config_set_high_priority(&cfg, true);
 	  dma_channel_set_config(dma32inc, &cfg, false);
   }
 
