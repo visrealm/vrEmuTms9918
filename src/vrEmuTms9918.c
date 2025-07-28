@@ -560,7 +560,7 @@ static void tmsCopyAlignMask(BitMask dstMask, const BitMask srcMask, int pixelSh
     // Use DMA for aligned copy
     dma_channel_set_read_addr(dma32inc, srcMask, false);
     dma_channel_set_write_addr(dma32inc, dstMask, false);
-    dma_channel_set_trans_count(dma32inc, 36, true);  // 36 bytes, start transfer
+    dma_channel_set_trans_count(dma32inc, 9 * sizeof(uint32_t), true);  // 36 bytes, start transfer
     return;
   }
 
@@ -749,6 +749,15 @@ static __attribute__((section(".scratch_x.lookup"))) uint32_t __aligned(4) maskE
   0x0000ff00, 0xff00ff00, 0x00ffff00, 0xffffff00,
   0x000000ff, 0xff0000ff, 0x00ff00ff, 0xffff00ff,
   0x0000ffff, 0xff00ffff, 0x00ffffff, 0xffffffff
+};
+
+/* a lookup from a 4-bit mask to a word of 8-bit masks (normal byte order) */
+static __attribute__((section(".scratch_x.lookup"))) uint32_t __aligned(4) maskExpandNibbleToWord[16] =
+{
+  0x00000000, 0x000000ff, 0x0000ff00, 0x0000ffff,
+  0x00ff0000, 0x00ff00ff, 0x00ffff00, 0x00ffffff,
+  0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff,
+  0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff
 };
 
 bool lookupsReady = false;
@@ -1391,85 +1400,6 @@ static void __time_critical_func(vrEmuTms9918Text80ScanLine)(VR_EMU_INST_ARG uin
   }
 }
 
-
-/* Function:  renderEcmShiftedTile
- * ----------------------------------------
- * render the first shiny new ECM (enhanced color mode) graphics I tile in a scrolled scanline
- * this guy sets the stage for the remaining tiles (offset-wise). if the tile isn't scrolled
- * we end up just using renderEcmAlignedTile() instead
- *
- * quadPixels either incremented by 1 or 0, depending where it lands (how shifted it is)
- * 
- * INLINE: so will be different versions generated, depending on hard-coded (or known at compile-time) arguments
- */
-static inline uint32_t* renderEcmStartTile(
-  uint32_t *quadPixels,
-  const uint32_t tilePixels[2],
-  const uint32_t pattMask,
-  const uint32_t startPattBit,
-  const uint32_t shift)
-{
-  const uint32_t rightMask = maskExpandNibbleToWordRev[pattMask & 0xf];
-
-  // first tile will either take one or two nibbles depending on the shift
-  if (startPattBit < 4)
-  {
-    const uint32_t leftMask = maskExpandNibbleToWordRev[pattMask >> 4];
-    const uint32_t reverseShift = 32 - shift;
-    const uint32_t mask = (leftMask >> shift) | (rightMask << reverseShift);
-    const uint32_t shifted = mask & ((tilePixels[0] >> shift) | (tilePixels[1] << reverseShift));
-    *quadPixels++ = (*quadPixels & ~mask) | shifted;
-  }
-
-  const uint32_t mask = (rightMask >> shift);
-  const uint32_t shifted = mask & (tilePixels[1] >> shift);
-  *quadPixels = (*quadPixels & ~mask) | shifted;
-
-  if (startPattBit == 4) ++quadPixels;
-
-  return quadPixels;
-}
-
-/* Function:  renderEcmShiftedTile
- * ----------------------------------------
- * render a shiny new ECM (enhanced color mode) graphics I tile which is NOT aligned to a word boundary
- *
- * quadPixels always incremented by 2
- * 
- * INLINE: so will be different versions generated, depending on hard-coded (or known at compile-time) arguments
- */
-static inline uint32_t* renderEcmShiftedTile(
-  uint32_t *quadPixels,
-  const uint32_t tilePixels[2],
-  const uint32_t pattMask,
-  const uint32_t shift,
-  const uint32_t reverseShift) 
-{
-  const uint32_t rightMask = maskExpandNibbleToWordRev[pattMask & 0xf];
-  const uint32_t leftMask = maskExpandNibbleToWordRev[pattMask >> 4];
-
-  {
-    const uint32_t mask = leftMask << reverseShift;
-    const uint32_t shifted = mask & (tilePixels[0] << reverseShift);
-    *quadPixels++ = (*quadPixels & ~mask) | shifted;
-  }
-
-  {
-    uint32_t shifted = (tilePixels[0] >> shift) | (tilePixels[1] << reverseShift);
-    const uint32_t mask = ~((leftMask >> shift) | (rightMask << reverseShift));
-    if (mask) shifted = (*quadPixels & mask) | (~mask & shifted);
-    *quadPixels++ = shifted;
-  }
-
-  {
-    const uint32_t mask = (rightMask >> shift);
-    const uint32_t shifted = mask & (tilePixels[1] >> shift);
-    *quadPixels = (*quadPixels & ~mask) | shifted;
-  }
-
-  return quadPixels;
-}
-
 /* Function:  renderEcmAlignedTile
  * ----------------------------------------
  * render a shiny new ECM (enhanced color mode) graphics I tile which is aligned to a word boundary
@@ -1478,41 +1408,15 @@ static inline uint32_t* renderEcmShiftedTile(
  * 
  * INLINE: so will be different versions generated, depending on hard-coded (or known at compile-time) arguments
  */
-static inline uint32_t* renderEcmAlignedTile(
+static inline void renderEcmAlignedTile(
   uint32_t *quadPixels,
-  const uint32_t tilePixels[2],
-  const uint32_t pattMask)
+  const uint32_t tilePixels[2])
 {
-  if (pattMask == 0xff)
-  {
-    *quadPixels++ = tilePixels[0];
-    *quadPixels++ = tilePixels[1];
-  }
-  else
-  {
-    // not shifted, but transparent - need to mask the two nibbles
-    const uint32_t rightMask = maskExpandNibbleToWordRev[pattMask & 0xf];
-    const uint32_t leftMask = maskExpandNibbleToWordRev[pattMask >> 4];
-
-    *quadPixels++ = (*quadPixels & ~leftMask) | (leftMask & tilePixels[0]);
-    *quadPixels++ = (*quadPixels & ~rightMask) | (rightMask & tilePixels[1]);  
-  }
-
-  return quadPixels;
+  *quadPixels++ = tilePixels[0];
+  *quadPixels++ = tilePixels[1];
 }
 
-/* Function:  quadPixelIncrement
- * ----------------------------------------
- * compute the amount to increment our quad pixel pointer by.
- * generally, 2 words (8 pixel bytes), but in the case of the first tile
- * in a scrolled row, will either be 1 or even... 0 depending on how 
- * many pixels we're scrolled by
- */
-static inline uint32_t quadPixelIncrement(uint32_t startPattBit)
-{
-  if (!startPattBit) return 2;
-  return startPattBit <= 4;
-}
+static const uint32_t zeroPixels[2] = {0, 0};
 
 
 /* Function:  renderEcm0Tile
@@ -1521,7 +1425,7 @@ static inline uint32_t quadPixelIncrement(uint32_t startPattBit)
  * 
  * INLINE: so will be different versions generated, depending on hard-coded (or known at compile-time) arguments
  */
-static inline uint32_t* renderEcm0Tile(
+static inline void renderEcm0Tile(
   uint32_t *quadPixels,
   const uint32_t xPos,
   const uint8_t pattIdx,
@@ -1535,9 +1439,14 @@ static inline uint32_t* renderEcm0Tile(
 {
   /* was this pattern empty? we remember the last empty pattern.
      OR is the pixel mask full here? in either case, let's bail */
-  if ((!isTile2 && !tmsTestRowBitsMask(xPos, 0xff << (24 + startPattBit), 8, false, true, false)))
+  if ((!isTile2 && !tmsTestRowBitsMaskAligned(xPos, 0xff << 24, tms9918->finalMask)))
   {
-    return quadPixels + quadPixelIncrement(startPattBit);
+    // For T1, write transparent pixels (0) instead of skipping
+    if (!isTile2)
+    {
+      renderEcmAlignedTile(quadPixels, zeroPixels);
+    }
+    return;
   }
 
   /* grab the attributes for this tile */
@@ -1562,195 +1471,26 @@ static inline uint32_t* renderEcm0Tile(
                                   (fgPalette & rightMask) | (bgPalette & ~rightMask)};
 
   /* have we any pixels to draw? */
-  const uint32_t offset = (24 + startPattBit);  
   uint32_t pattMask = 0xff;
   if (!bgColor) pattMask &= patt;
   if (!fgColor) pattMask ^= patt;
 
-  pattMask <<= offset;
-  pattMask = tmsTestRowBitsMask(xPos - startPattBit, pattMask, 8, true, !isTile2, true);
+  pattMask <<= 24;
+  if (isTile2) tmsUpdateRowBitsMaskAligned(xPos, pattMask, tms9918->layerSelectionMask);
 
     /* anything to draw?*/
   if (!pattMask)
   {
-    return quadPixels + quadPixelIncrement(startPattBit);
-  }
-
-  pattMask >>= offset;
-
-  if (startPattBit)
-  {
-    /* first tile gets different treatment because we discard the pixels shifted off the left */
-    quadPixels = renderEcmStartTile(quadPixels, tilePixels, pattMask, startPattBit, shift << 3);
-  }
-  else
-  {
-    /* a regual shifted tile... we need to write three nibbles for these */
-    switch (shift)
+    if (!isTile2)
     {
-      case 0:
-        quadPixels = renderEcmAlignedTile(quadPixels, tilePixels, pattMask);
-        break;
-      case 1:
-        quadPixels = renderEcmShiftedTile(quadPixels, tilePixels, pattMask, 8, 24);
-        break;
-      case 2:
-        quadPixels = renderEcmShiftedTile(quadPixels, tilePixels, pattMask, 16, 16);
-        break;
-      default:
-        quadPixels = renderEcmShiftedTile(quadPixels, tilePixels, pattMask, 24, 8);
-        break;
+      renderEcmAlignedTile(quadPixels, zeroPixels);
     }
+    return;
   }
 
-  return quadPixels;
+  renderEcmAlignedTile(quadPixels, tilePixels);
 }
 
-
-/* Function:  renderEcmTile
- * ----------------------------------------
- * render a shiny new ECM (enhanced color mode) graphics I tile
- * 
- * INLINE: so will be different versions generated, depending on hard-coded (or known at compile-time) arguments
- */
-static inline uint32_t* renderEcmTile(
-  uint32_t *quadPixels,
-  const uint32_t xPos,
-  const uint8_t pattIdx,
-  const uint8_t patternTable[],
-  const uint32_t colorTableAddr,
-  const uint32_t startPattBit,
-  const uint32_t ecm,
-  const uint32_t ecmOffset,
-  const uint32_t ecmColorMask,
-  const uint32_t ecmColorOffset,
-  const uint32_t pal,
-  const bool attrPerPos,
-  const uint32_t rowOffset,
-  const uint32_t pattRow,
-  const uint32_t tileIndex,
-  const uint32_t shift,
-  uint32_t *lastEmpty,
-  const bool isTile2,
-  const bool alwaysOnTop)
-{
-  /* was this pattern empty? we remember the last empty pattern.
-     OR is the pixel mask full here? in either case, let's bail */
-  if (*lastEmpty == pattIdx ||
-      (!isTile2 && !tmsTestRowBitsMask(xPos, 0xff << (24 + startPattBit), 8, false, true, false)))
-  {
-    return quadPixels + quadPixelIncrement(startPattBit);
-  }
-
-  /* grab the attributes for this tile */
-  uint32_t colorTableOffset = attrPerPos ? tileIndex : pattIdx;
-  uint32_t pattOffset = pattIdx * PATTERN_BYTES;
-  
-  const uint32_t colorByte = tms9918->vram.bytes[colorTableAddr + colorTableOffset];
-
-  pattOffset += (colorByte & 0x20) ? 7 - pattRow : pattRow;
-
-  uint32_t pattMask = (colorByte & 0x10) ? 0 : 0xff;
-  uint32_t leftIndex = 0, rightIndex = 0;
-
-  /* retreive the pixel data for each ecm bitplane, and generate a
-     combined mask while we're at it. if the mask has a bit set
-     then we have a non-zero pixel at that location */
-  uint32_t patt[3]; // indexes into this are reversed. ecm3 is in index 0
-
-
-  switch (ecm)
-  {
-    case 3:
-      patt[0] = patternTable[pattOffset + ecmOffset * 2];
-    case 2:
-      patt[1] = patternTable[pattOffset + ecmOffset];
-    default:
-      patt[2] = patternTable[pattOffset];
-  }
-
-  if (colorByte & 0x40) // flipX
-  {
-    patt[0] = reversedBits[patt[0]];
-    patt[1] = reversedBits[patt[1]];
-    patt[2] = reversedBits[patt[2]];
-  }
-
-  switch (ecm)
-  {
-    case 3:
-        pattMask |= patt[0];
-        leftIndex = (patt[0] >> 4) << 8;
-        rightIndex = (patt[0] & 0xf) << 8;
-    case 2:
-        pattMask |= patt[1];
-        leftIndex |= (patt[1] & 0xf0);
-        rightIndex |= (patt[1] & 0xf) << 4;
-    default:
-        pattMask |= patt[2];
-        leftIndex |= (patt[2] >> 4);
-        rightIndex |= (patt[2] & 0xf);
-  }
-
-  /* have we any pixels to draw? */
-  if (pattMask)
-  {
-    const uint32_t priority = alwaysOnTop || (colorByte & 0x80);
-    const uint32_t offset = (24 + startPattBit);
-    pattMask <<= offset;
-    if (!priority)
-      pattMask = tmsTestRowBitsMask(xPos - startPattBit, pattMask, 8, true, !isTile2, true);
-    else
-      pattMask = tmsTestRowBitsMask(xPos - startPattBit, pattMask, 8, true, !isTile2, false);
-
-      /* anything to draw?*/
-    if (!pattMask)
-    {
-      /* we don't set lastEmpty here, because it had pixels.. they were just masked out */
-      return quadPixels + quadPixelIncrement(startPattBit);
-    }
-
-    pattMask >>= offset;
-
-    const uint32_t palette = repeatedPalette[pal | ((colorByte & ecmColorMask) << ecmColorOffset)];
-    const uint32_t tilePixels[2] = {ecmLookup[leftIndex] | palette,
-                                    ecmLookup[rightIndex] | palette};
-
-    if (startPattBit)
-    {
-      /* first tile gets different treatment because we discard the pixels shifted off the left */
-      quadPixels = renderEcmStartTile(quadPixels, tilePixels, pattMask, startPattBit, shift << 3);
-    }
-    else
-    {
-      /* a regular shifted tile... we need to write three nibbles for these */
-      switch (shift)
-      {
-        case 0:
-            /* not shifted, but has transparency. we'll need to mask it */
-          quadPixels = renderEcmAlignedTile(quadPixels, tilePixels, pattMask);
-          break;
-        case 1:
-          quadPixels = renderEcmShiftedTile(quadPixels, tilePixels, pattMask, 8, 24);
-          break;
-        case 2:
-          quadPixels = renderEcmShiftedTile(quadPixels, tilePixels, pattMask, 16, 16);
-          break;
-        case 3:
-          quadPixels = renderEcmShiftedTile(quadPixels, tilePixels, pattMask, 24, 8);
-          break;
-      }
-    }
-  }
-  else
-  {
-    quadPixels += quadPixelIncrement(startPattBit);
-    *lastEmpty = pattIdx;
-  }
-  return quadPixels;
-}
-
-static const uint32_t zeroPixels[2] = {0, 0};
 
 /* Function:  writeToAlignedBuffer
  * ----------------------------------------
@@ -1807,7 +1547,9 @@ static inline void renderEcmTileToAlignedBuffer(
 
   pattOffset += (colorByte & 0x20) ? 7 - pattRow : pattRow;
 
-  uint32_t pattMask = (colorByte & 0x10) ? 0 : 0xff;
+  const uint8_t *pattData = patternTable + pattOffset;
+
+  uint32_t pattMask = (colorByte & 0x10) ? 0 : 0xff;  // handle transparency flag
   uint32_t leftIndex = 0, rightIndex = 0;
 
   /* retreive the pixel data for each ecm bitplane, and generate a
@@ -1818,13 +1560,13 @@ static inline void renderEcmTileToAlignedBuffer(
   switch (ecm)
   {
     case 3:
-      patt[0] = patternTable[pattOffset + ecmOffset * 2];
+      patt[0] = pattData[ecmOffset * 2];
       pattMask |= patt[0];
     case 2:
-      patt[1] = patternTable[pattOffset + ecmOffset];
+      patt[1] = pattData[ecmOffset];
       pattMask |= patt[1];
     default:
-      patt[2] = patternTable[pattOffset];
+      patt[2] = *pattData;
       pattMask |= patt[2];
   }
 
@@ -1839,12 +1581,6 @@ static inline void renderEcmTileToAlignedBuffer(
       pattMask = reversedBits[pattMask];
     }
 
-
-    //if (!priority)
-    //  pattMask = tmsTestRowBitsMask(xPos - startPattBit, pattMask, 8, true, !isTile2, true);
-    //else
-    //  pattMask = tmsTestRowBitsMask(xPos - startPattBit, pattMask, 8, true, !isTile2, false);
-      /* anything to draw?*/
     if (!pattMask)
     {
       /* we don't set lastEmpty here, because it had pixels.. they were just masked out */
@@ -1856,10 +1592,8 @@ static inline void renderEcmTileToAlignedBuffer(
       return;
     }
     const uint32_t priority = alwaysOnTop || (colorByte & 0x80);
-    const uint32_t offset = 24;
     pattMask <<= 24;
 
-//    pattMask >>= offset;
     if (isTile2) tmsUpdateRowBitsMaskAligned(xPos, pattMask, tms9918->layerSelectionMask);
 
     switch (ecm)
@@ -1937,35 +1671,26 @@ static inline void __time_critical_func(vrEmuF18ATileScanLine)(VR_EMU_INST_ARG c
       }
 
       dma_channel_wait_for_finish_blocking(dma32noinc); 
+      // Get the appropriate aligned buffer for this layer
+      uint8_t* targetBuffer = isTile2 ? tms9918->tileLayer2Buffer : tms9918->tileLayer1Buffer;      
 
-      // Optimization: use aligned buffers when any horizontal scrolling is active
-     // if (shift)// || (TMS_REGISTER(tms9918, 0x1b) & 0x07) || (TMS_REGISTER(tms9918, 0x19) & 0x07))
+      while (numTiles--)
       {
-        // Get the appropriate aligned buffer for this layer
-        uint8_t* targetBuffer = isTile2 ? tms9918->tileLayer2Buffer : tms9918->tileLayer1Buffer;
-        
-
-        while (numTiles--)
+        /* next page? */
+        if (tileIndex == GRAPHICS_NUM_COLS)
         {
-          /* next page? */
-          if (tileIndex == GRAPHICS_NUM_COLS)
+          if (hpSize)
           {
-            if (hpSize)
-            {
-              rowNamesAddr ^= 0x400;
-              if (attrPerPos) colorTableAddr ^= 0x400;
-            }
-            tileIndex = 0;
+            rowNamesAddr ^= 0x400;
+            if (attrPerPos) colorTableAddr ^= 0x400;
           }
-          const uint8_t pattIdx = tms9918->vram.bytes[rowNamesAddr + tileIndex];
-          renderEcmTileToAlignedBuffer(VR_EMU_INST targetBuffer, xPos, pattIdx, patternTable, colorTableAddr, ecm, ecmOffset,
-                                      ecmColorMask, ecmColorOffset, pal, attrPerPos, rowOffset, pattRow, tileIndex++, 
-                                      &lastEmpty, isTile2, alwaysOnTop);
-          xPos += 8;
+          tileIndex = 0;
         }
-        
-        // Early exit - don't use original bit-shifting code
-        return;
+        const uint8_t pattIdx = tms9918->vram.bytes[rowNamesAddr + tileIndex];
+        renderEcmTileToAlignedBuffer(VR_EMU_INST targetBuffer, xPos, pattIdx, patternTable, colorTableAddr, ecm, ecmOffset,
+                                    ecmColorMask, ecmColorOffset, pal, attrPerPos, rowOffset, pattRow, tileIndex++, 
+                                    &lastEmpty, isTile2, alwaysOnTop);
+        xPos += 8;
       }
     }
     else  // ECM0 is a bit different
@@ -1984,7 +1709,8 @@ static inline void __time_critical_func(vrEmuF18ATileScanLine)(VR_EMU_INST_ARG c
           tileIndex = 0;
         }
         const uint8_t pattIdx = tms9918->vram.bytes[rowNamesAddr + tileIndex];
-        quadPixels = renderEcm0Tile(quadPixels, xPos, pattIdx, patternTable, colorTableAddr, startPattBit, pal, pattRow, 0, isTile2);
+        renderEcm0Tile(quadPixels, xPos, pattIdx, patternTable, colorTableAddr, startPattBit, pal, pattRow, 0, isTile2);
+        quadPixels += 2;
         xPos += 8 - startPattBit;
         startPattBit = 0;
         ++tileIndex;
@@ -2335,7 +2061,10 @@ static inline void compositeAlignedTileBuffersWithDMA(VR_EMU_INST_ARG uint8_t pi
       dma_channel_set_read_addr(dma32inc, layer1, false);
       dma_channel_set_write_addr(dma32inc, pixels, false);
       dma_channel_set_trans_count(dma32inc, 32, true);  // 32 pixels = 8 words
-    }
+      layer1 += 32;
+      layer2 += 32;
+      pixels += 32;
+  }
     else if (mask == 0xFFFFFFFF)
     {
       // All T2 pixels - use DMA copy for speed
@@ -2343,21 +2072,27 @@ static inline void compositeAlignedTileBuffersWithDMA(VR_EMU_INST_ARG uint8_t pi
       dma_channel_set_read_addr(dma32inc, layer2, false);
       dma_channel_set_write_addr(dma32inc, pixels, false);
       dma_channel_set_trans_count(dma32inc, 32, true);  // 32 pixels = 8 words
+      layer1 += 32;
+      layer2 += 32;
+      pixels += 32;
     }
     else
     {
-      // Mixed - use CPU compositing for this 32-pixel region
-      for (int i = 0; i < 32; ++i, mask <<= 1)
-      {
-         pixels[i] = mask < 0 ? layer2[i] : layer1[i];  // T2 pixel
+      // mixed - process 4 pixels at a time with individual byte access
+      for (int i = 0; i < 8; i++)
+      {        
+        // process 4 pixels using individual bytes but fewer iterations
+        pixels[0] = mask < 0 ? layer2[0] : layer1[0]; mask <<= 1;
+        pixels[1] = mask < 0 ? layer2[1] : layer1[1]; mask <<= 1;
+        pixels[2] = mask < 0 ? layer2[2] : layer1[2]; mask <<= 1;
+        pixels[3] = mask < 0 ? layer2[3] : layer1[3]; mask <<= 1;
+        
+        pixels += 4;
+        layer1 += 4;
+        layer2 += 4;
       }
     }
-    layer1 += 32;
-    layer2 += 32;
-    pixels += 32;
   }
-  
-  dma_channel_wait_for_finish_blocking(dma32noinc);
 }
 
 
@@ -2560,6 +2295,7 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ScanLine)(VR_E
       rowSpriteBits[i] = 0;
       rowBits[i] = 0;
       tms9918->layerSelectionMask[i] = 0; // Default to all T1 pixels
+      tms9918->finalMask[i] = 0;
     }
     tms9918->scanlineHasSprites = false;
 
