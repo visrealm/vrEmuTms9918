@@ -816,14 +816,19 @@ static inline void loadSpriteData(uint32_t *spriteBits, uint32_t pattOffset, uin
   uint32_t patt;
   do  // do-while since behavior for ecm=0 and ecm==1 is the same
   {
-    patt = tms9918->vram.bytes[pattOffset];
-    if (flipX) patt = reversedBits[patt];
-    spriteBits[i] = patt << ((flipX && sprite16) ? 16 : 24);
+    if (patt = tms9918->vram.bytes[pattOffset])
+    {
+      if (flipX) patt = reversedBits[patt];
+      spriteBits[i] = patt << ((flipX && sprite16) ? 16 : 24);
+    }
+
     if (sprite16)
     {
-      patt = tms9918->vram.bytes[pattOffset + PATTERN_BYTES * 2];
-      if (flipX) patt = reversedBits[patt];
-      spriteBits[i] |= patt << (flipX ? 24 : 16);
+      if (patt = tms9918->vram.bytes[pattOffset + PATTERN_BYTES * 2])
+      {
+        if (flipX) patt = reversedBits[patt];
+        spriteBits[i] |= patt << (flipX ? 24 : 16);
+      }
     }
     *pattMask |= spriteBits[i];
     pattOffset += ecmOffset;
@@ -899,12 +904,11 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
       yPos -= 256;
 
     int32_t pattRow = y - yPos;
-    if (pattRow < 0)
+    if (pattRow < 0 || pattRow > 31)
     {
       spriteAttr += SPRITE_ATTR_BYTES;
       continue;
     }
-
     pattRow >>= spriteMag;  // this needs to be a shift because -1 / 2 becomes 0. Bad.
 
     uint8_t thisSpriteSize = spriteSize;
@@ -967,20 +971,7 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
     uint32_t spriteBits[3] = {0}; // a 32-bit value for each ecm bit plane (also pushed far left)
     const bool flipX = spriteAttrColor & 0x40;
 
-    if (flipX)
-      if (thisSprite16)
-        loadSpriteData(spriteBits, pattOffset, &pattMask, ecm, ecmOffset, true, true);
-      else
-        loadSpriteData(spriteBits, pattOffset, &pattMask, ecm, ecmOffset, true, false);
-    else
-      if (thisSprite16)
-      {
-        loadSpriteData(spriteBits, pattOffset, &pattMask, ecm, ecmOffset, false, true);
-      }
-      else
-      {
-        loadSpriteData(spriteBits, pattOffset, &pattMask, ecm, ecmOffset, false, false);
-      }
+    loadSpriteData(spriteBits, pattOffset, &pattMask, ecm, ecmOffset, flipX, thisSprite16);
 
     /* bail early if no bits to draw */
     if (!pattMask)
@@ -999,17 +990,9 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
     {
       int32_t absX = -xPos;
       uint32_t offset = absX >> spriteMag;
-      switch (ecm)
-      {
-        case 3:
-          spriteBits[2] <<= offset;
-          // fallthrough
-        case 2:
-          spriteBits[1] <<= offset;
-          // fallthrough
-        default:
-          spriteBits[0] <<= offset;
-      }
+      spriteBits[2] <<= offset;
+      spriteBits[1] <<= offset;
+      spriteBits[0] <<= offset;
       pattMask <<= absX;
       
       /* bail early if no bits to draw */
@@ -1029,7 +1012,7 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
     }
 
     /* test and update the collision mask */
-    int32_t validPixels = tmsTestCollisionMask(VR_EMU_INST xPos, pattMask, thisSpriteSizePx);
+    uint32_t validPixels = tmsTestCollisionMask(VR_EMU_INST xPos, pattMask, thisSpriteSizePx);
 
     /* if the result is different, we collided */
     if (validPixels != pattMask)
@@ -1057,7 +1040,6 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
           uint32_t* quadBuffer = (uint32_t*)alignedBuffer;
           
           uint32_t tempValidPixels = validPixels;
-          int bufferPos = 0;
 
           while (tempValidPixels)
           {
@@ -1067,27 +1049,24 @@ static inline uint8_t __time_critical_func(renderSprites)(VR_EMU_INST_ARG uint8_
             {
               // render 4 pixels to aligned buffer
               uint32_t ecmIndex = calculateEcmIndex(ecm, spriteBits[0], spriteBits[1], spriteBits[2]);
-              quadBuffer[bufferPos] = ecmLookup[ecmIndex] | quadPal;
-            }
-            else
-            {
-              quadBuffer[bufferPos] = 0;              
+              *quadBuffer = ecmLookup[ecmIndex] | quadPal;
             }
             spriteBits[2] <<= 4;
             spriteBits[1] <<= 4;
             spriteBits[0] <<= 4;
             tempValidPixels <<= 8;
-            ++bufferPos;
+            ++quadBuffer;
           }
           
           // copy from aligned buffer to final pixels with collision mask
-          int i = 0;
-          while (validPixels)
+          uint8_t *p = pixels + xPos;
+          int32_t validPixelsSigned = (int32_t)validPixels;
+          for (int i = 0; validPixelsSigned; i += 2)
           {
-            if (validPixels < 0) pixels[xPos + i] = alignedBuffer[i >> 1];
-            validPixels <<= 1; ++i;
-            if (validPixels < 0) pixels[xPos + i] = alignedBuffer[i >> 1];
-            validPixels <<= 1; ++i;
+            if (validPixelsSigned < 0) p[i] = alignedBuffer[i >> 1];
+            validPixelsSigned <<= 1;
+            if (validPixelsSigned < 0) p[i + 1] = alignedBuffer[i >> 1];
+            validPixelsSigned <<= 1;
           }
         }
         else  // regular ecm sprite (8 or 16px, non-magnified)
@@ -1540,7 +1519,7 @@ static inline void renderEcmTileToAlignedBuffer(
   /* was this pattern empty? we remember the last empty pattern.
      OR is the pixel mask full here? in either case, let's bail */
   if ((*lastEmpty == pattIdx) ||
-      (!isTile2 && !tmsTestRowBitsMaskAligned(xPos, 0xff << 24, tms9918->finalMask)))
+      (!tmsTestRowBitsMaskAligned(xPos, 0xff << 24, tms9918->finalMask)))
   {
     // For T1, write transparent pixels (0) instead of skipping
     if (!isTile2)
@@ -1887,6 +1866,7 @@ pixels[TMS9918_PIXELS_X])
   vrEmuF18ATileLayerScanLine(VR_EMU_INST y, pixels, &T2_CONFIG);
 }
 
+static bool underLayer = false;
 /* Function:  renderBitmapLayer
  * ----------------------------------------
  * generate an F18A bitmap layer scanline
@@ -1896,6 +1876,7 @@ pixels[TMS9918_PIXELS_X])
 static inline bool __time_critical_func(renderBitmapLayer)(VR_EMU_INST_ARG uint8_t y, bool opaque, const uint8_t width, const uint16_t addr, const uint8_t bmlCtl, uint8_t pixels[TMS9918_PIXELS_X])
 {
   bool writeMask = bmlCtl & 0x40;
+  underLayer = !writeMask;
 
   bool returnVal = true;
 
@@ -2003,7 +1984,7 @@ static inline bool __time_critical_func(renderBitmapLayer)(VR_EMU_INST_ARG uint8
  * ----------------------------------------
  * generate an F18A bitmap layer scanline
  */
-static bool __time_critical_func(vrEmuTms9918BitmapLayerScanLine)(VR_EMU_INST_ARG uint8_t y, uint8_t pixels[TMS9918_PIXELS_X])
+static bool __time_critical_func(vrEmuTms9918BitmapLayerScanLine)(VR_EMU_INST_ARG int16_t y, uint8_t pixels[TMS9918_PIXELS_X])
 {
   /* bml enabled? */
   const uint8_t bmlCtl = TMS_REGISTER(tms9918, 0x1f);
@@ -2022,14 +2003,7 @@ static bool __time_critical_func(vrEmuTms9918BitmapLayerScanLine)(VR_EMU_INST_AR
   const uint8_t width = TMS_REGISTER(tms9918, 0x23) ? (TMS_REGISTER(tms9918, 0x23) >> 2) : 64;
   const uint16_t addr = (TMS_REGISTER(tms9918, 0x20) << 6) + (y * width);
 
-  //if (bmlCtl & 0x20) // transp
-  {
-    return renderBitmapLayer(VR_EMU_INST y, !(bmlCtl & 0x20), width, addr, bmlCtl, pixels);
-  }
-//  else
-  {
-//    renderBitmapLayer(VR_EMU_INST y, false, width, addr, bmlCtl, pixels);
-  }
+  return renderBitmapLayer(VR_EMU_INST y, !(bmlCtl & 0x20), width, addr, bmlCtl, pixels);
 }
 
 /* Function:  compositeAlignedTileBuffersWithDMA
@@ -2051,45 +2025,122 @@ static inline void compositeAlignedTileBuffersWithDMA(VR_EMU_INST_ARG uint8_t pi
   for (int maskWord = 0; maskWord < TMS9918_PIXELS_X / 32; maskWord++)
   {
     int32_t mask = selectionMask[maskWord];
-    int32_t spriteMask = rowSpriteBits[maskWord];
+    int32_t spriteMask = rowSpriteBits[maskWord] | rowBits[maskWord];
+
+    if (spriteMask == -1)
+    {
+      layer1 += 32;
+      layer2 += 32;
+      pixels += 32;
+      continue;
+    }
+
+    if (!underLayer && !spriteMask)
+    {    
+      if (mask == 0)
+      {
+        // All T1 pixels - use DMA copy for speed  
+        dma_channel_wait_for_finish_blocking(dma32inc);
+        dma_channel_set_read_addr(dma32inc, layer1, false);
+        dma_channel_set_write_addr(dma32inc, pixels, false);
+        dma_channel_set_trans_count(dma32inc, 32, true);  // 32 pixels = 8 words
+        pixels += 32;
+        layer1 += 32;
+        layer2 += 32;
+        continue;
+      }
+      else if (mask == 0xFFFFFFFF)
+      {
+        // All T2 pixels - use DMA copy for speed
+        dma_channel_wait_for_finish_blocking(dma32inc);
+        dma_channel_set_read_addr(dma32inc, layer2, false);
+        dma_channel_set_write_addr(dma32inc, pixels, false);
+        dma_channel_set_trans_count(dma32inc, 32, true);  // 32 pixels = 8 words
+        pixels += 32;
+        layer1 += 32;
+        layer2 += 32;
+        continue;
+      }
+    }
     
-    if (mask == 0 && spriteMask == 0)
+    // mixed - process 4 pixels at a time with individual byte access
+    if (underLayer)
     {
-      // All T1 pixels - use DMA copy for speed  
-      dma_channel_wait_for_finish_blocking(dma32inc);
-      dma_channel_set_read_addr(dma32inc, layer1, false);
-      dma_channel_set_write_addr(dma32inc, pixels, false);
-      dma_channel_set_trans_count(dma32inc, 32, true);  // 32 pixels = 8 words
+      uint8_t* sources[2] = {layer1, layer2};
+      for (int i = 0; i < 8; i++)
+      {
+        // Unrolled 4 pixels
+        if (spriteMask >= 0) {
+          uint8_t pixel_value = sources[mask < 0][0];
+          if (pixel_value) pixels[0] = pixel_value;
+        }
+        mask <<= 1; spriteMask <<= 1;
+
+        if (spriteMask >= 0) {
+          uint8_t pixel_value = sources[mask < 0][1];
+          if (pixel_value) pixels[1] = pixel_value;
+        }
+        mask <<= 1; spriteMask <<= 1;
+
+        if (spriteMask >= 0) {
+          uint8_t pixel_value = sources[mask < 0][2];
+          if (pixel_value) pixels[2] = pixel_value;
+        }
+        mask <<= 1; spriteMask <<= 1;
+
+        if (spriteMask >= 0) {
+          uint8_t pixel_value = sources[mask < 0][3];
+          if (pixel_value) pixels[3] = pixel_value;
+        }
+        mask <<= 1; spriteMask <<= 1;
+
+        pixels += 4;
+        sources[0] += 4;
+        sources[1] += 4;
+      }
       layer1 += 32;
       layer2 += 32;
-      pixels += 32;
-  }
-    else if (mask == 0xFFFFFFFF && spriteMask == 0)
+    }
+    else if (spriteMask)
     {
-      // All T2 pixels - use DMA copy for speed
-      dma_channel_wait_for_finish_blocking(dma32inc);
-      dma_channel_set_read_addr(dma32inc, layer2, false);
-      dma_channel_set_write_addr(dma32inc, pixels, false);
-      dma_channel_set_trans_count(dma32inc, 32, true);  // 32 pixels = 8 words
-      layer1 += 32;
-      layer2 += 32;
-      pixels += 32;
+      uint8_t* sources[2] = {layer1, layer2};
+      for (int i = 0; i < 8; i++)
+      {
+        // Unrolled 4 pixels
+        if (spriteMask >= 0) { pixels[0] = mask < 0 ? layer2[0] : layer1[0]; }
+        mask <<= 1; spriteMask <<= 1;
+
+        if (spriteMask >= 0) { pixels[1] = mask < 0 ? layer2[1] : layer1[1]; }
+        mask <<= 1; spriteMask <<= 1;
+
+        if (spriteMask >= 0) { pixels[2] = mask < 0 ? layer2[2] : layer1[2]; }
+        mask <<= 1; spriteMask <<= 1;
+
+        if (spriteMask >= 0) { pixels[3] = mask < 0 ? layer2[3] : layer1[3]; }
+        mask <<= 1; spriteMask <<= 1;
+
+        pixels += 4;
+        layer1 += 4;
+        layer2 += 4;
+      }
     }
     else
     {
-      // mixed - process 4 pixels at a time with individual byte access
       for (int i = 0; i < 8; i++)
-      {        
-        // process 4 pixels using individual bytes but fewer iterations
-        if (spriteMask >= 0) {pixels[0] = mask < 0 ? layer2[0] : layer1[0];}
-        mask <<= 1; spriteMask <<= 1;
-        if (spriteMask >= 0) { pixels[1] = mask < 0 ? layer2[1] : layer1[1]; }
-        mask <<= 1; spriteMask <<= 1;
-        if (spriteMask >= 0) { pixels[2] = mask < 0 ? layer2[2] : layer1[2]; }
-        mask <<= 1; spriteMask <<= 1;
-        if (spriteMask >= 0) { pixels[3] = mask < 0 ? layer2[3] : layer1[3]; }
-        mask <<= 1; spriteMask <<= 1;
-        
+      {
+        // Unrolled 4 pixels
+        pixels[0] = mask < 0 ? layer2[0] : layer1[0];
+        mask <<= 1;
+
+        pixels[1] = mask < 0 ? layer2[1] : layer1[1];
+        mask <<= 1;
+
+        pixels[2] = mask < 0 ? layer2[2] : layer1[2];
+        mask <<= 1;
+
+        pixels[3] = mask < 0 ? layer2[3] : layer1[3];
+        mask <<= 1;
+
         pixels += 4;
         layer1 += 4;
         layer2 += 4;
@@ -2114,7 +2165,7 @@ static uint8_t __time_critical_func(vrEmuTms9918GraphicsIScanLine)(VR_EMU_INST_A
 
     tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
 
-    if (writeMask)
+    if (writeMask)  // bitmap layer completely masked it?
     {
       // Check if horizontal scrolling is active on either layer
       const int t1Scroll = TMS_REGISTER(tms9918, 0x1b) & 0x07;
@@ -2287,6 +2338,8 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ScanLine)(VR_E
   bg = repeatedPalette[tmsMainBgColor(tms9918)];
   if (tmsCachedMode == TMS_MODE_TEXT80) bg |= bg << 4;
   dma_channel_set_write_addr(dma32noinc, pixels, true);
+  underLayer = false;
+  //zeroPixels[0] = zeroPixels[1] = bg;
 
   bool dispActive = (TMS_REGISTER(tms9918, TMS_REG_1) & TMS_R1_DISP_ACTIVE);
 
