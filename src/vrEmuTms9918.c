@@ -2432,6 +2432,8 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
 
     int regIndex = reg & tms9918->lockedMask; // was 0x07
     TMS_REGISTER(tms9918, regIndex) = value;
+    if (regIndex < 0x0f) return;
+
     if ((regIndex == 0x37) || ((regIndex == 0x38) && ((value & 1) == 0)))
     {
       tms9918->gpuAddress = ((TMS_REGISTER(tms9918, 0x36) << 8) | TMS_REGISTER(tms9918, 0x37)) & 0xFFFE;
