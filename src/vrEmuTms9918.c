@@ -180,7 +180,7 @@ static inline uint16_t tmsSpritePatternTableAddr(VrEmuTms9918* tms9918)
  */
 static inline vrEmuTms9918Color tmsMainBgColor(VrEmuTms9918* tms9918)
 {
-  return TMS_REGISTER(tms9918, TMS_REG_FG_BG_COLOR) & 0x0f;
+  return 0;//TMS_REGISTER(tms9918, TMS_REG_FG_BG_COLOR) & 0x0f;
 }
 
 /* Function:  tmsFgColor
