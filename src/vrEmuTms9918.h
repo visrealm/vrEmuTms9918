@@ -72,7 +72,14 @@ typedef enum
   TMS_MODE_GRAPHICS_II,
   TMS_MODE_TEXT,
   TMS_MODE_MULTICOLOR,
-  TMS_MODE_TEXT80,
+  TMS_MODE_TEXT80,   /* F18A 80-column text */
+  /* V9938 display modes */
+  TMS_MODE_G3,       /* Graphics 3: G2 layout + Sprite Mode 2 */
+  TMS_MODE_G4,       /* Graphics 4: 256x192/212, 4bpp, 16 colours */
+  TMS_MODE_G5,       /* Graphics 5: 512x192/212, 2bpp, 4 colours */
+  TMS_MODE_G6,       /* Graphics 6: 512x192/212, 4bpp, 16 colours */
+  TMS_MODE_G7,       /* Graphics 7: 256x192/212, 8bpp, 256 colours */
+  TMS_MODE_TEXT2,    /* Text 2: 80-col with blink/attribute colour */
 } vrEmuTms9918Mode;
 
 typedef enum

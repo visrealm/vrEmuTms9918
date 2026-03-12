@@ -68,8 +68,8 @@
   #define VRAM_SIZE            (1 << 17) /* 128kB */
   #define TMS_REGISTERS        64
   #define TMS_STATUS_REGISTERS 10
-  #define MAPPED_REGISTERS 0
-  #define MAPPED_STATUS 0
+  #define MAPPED_REGISTERS     0
+  #define MAPPED_STATUS        0
 #else
   #define VRAM_SIZE            BASE_VRAM_SIZE
   #define TMS_REGISTERS        16
@@ -78,13 +78,19 @@
   #define MAPPED_STATUS        0
 #endif
 
-#define VRAM_MASK     (BASE_VRAM_SIZE - 1) /* 0x3fff */
+#if VR_EMU_TMS9918_MODE == VR_EMU_TMS9918_MODE_V9938
+  #define VRAM_MASK   (VRAM_SIZE - 1)       /* 0x1ffff - 17-bit */
+#else
+  #define VRAM_MASK   (BASE_VRAM_SIZE - 1)  /* 0x3fff  - 14-bit */
+#endif
 
 
 typedef struct
 {
   uint8_t  base[BASE_VRAM_SIZE];                 // 0x0000-0x3FFF (16KB)
-#if VR_EMU_TMS9918_MODE == VR_EMU_TMS9918_MODE_F18A
+#if VR_EMU_TMS9918_MODE == VR_EMU_TMS9918_MODE_V9938
+  uint8_t  ext[VRAM_SIZE - BASE_VRAM_SIZE];      // 0x4000-0x1FFFF (extended 112KB)
+#elif VR_EMU_TMS9918_MODE == VR_EMU_TMS9918_MODE_F18A
   /* video ram */
   uint8_t  gram1[0x1000];                       // 0x4000-0x4fff (4KB) 2x repeated 2KB
   uint16_t pram[0x0800];                        // 0x5000-0x5fff (4KB) 32x repeated 128B
@@ -137,8 +143,9 @@ struct vrEmuTMS9918_s
   uint8_t status[TMS_STATUS_REGISTERS];
 #endif
 
-  /* current address for cpu access (auto-increments) */
-  uint16_t currentAddress;
+  /* current address for cpu access (auto-increments)
+   * V9938: 17-bit address (A0-A16); stored as 32-bit for alignment */
+  uint32_t currentAddress;
 
   uint16_t gpuAddress;
 
@@ -171,7 +178,33 @@ struct vrEmuTMS9918_s
   bool configDirty;
 
   bool scanlineHasSprites;
+
+#if VR_EMU_TMS9918_MODE == VR_EMU_TMS9918_MODE_V9938
+  /* V9938 9-bit palette: byte0 = 0RRR0BBB, byte1 = 00000GGG
+   * Stored as uint16_t: low byte = RRR0BBB, high byte = 00000GGG */
+  uint16_t v9938Palette[16];
+
+  /* V9938 command processor state */
+  volatile uint8_t cmdActive;  /* non-zero while a command is executing */
+
+  /* V9938: blanking and scanline not in VRAM map, tracked separately */
+  uint8_t blanking;
+  uint8_t scanline;
+#endif
 };
+
+/* Macros to access blanking/scanline state regardless of mode */
+#if VR_EMU_TMS9918_MODE == VR_EMU_TMS9918_MODE_F18A
+  #define TMS_BLANKING(t)       (t)->vram.map.blanking
+  #define TMS_SCANLINE_STATE(t) (t)->vram.map.scanline
+#elif VR_EMU_TMS9918_MODE == VR_EMU_TMS9918_MODE_V9938
+  #define TMS_BLANKING(t)       (t)->blanking
+  #define TMS_SCANLINE_STATE(t) (t)->scanline
+#else
+  /* TMS9918 / base mode: no blanking/scanline tracking needed */
+  #define TMS_BLANKING(t)       (0)
+  #define TMS_SCANLINE_STATE(t) (0)
+#endif
 
 #if VR_EMU_TMS9918_SINGLE_INSTANCE
 extern VrEmuTms9918* tms9918;
@@ -205,7 +238,15 @@ inline void vrEmuTms9918WriteAddrImpl(VR_EMU_INST_ARG uint8_t data)
     }
     else /* address */
     {
+#if VR_EMU_TMS9918_MODE == VR_EMU_TMS9918_MODE_V9938
+      /* V9938: 17-bit address - A7-A0 from first byte, A13-A8 from second byte,
+       * A16-A14 from R#14 bits 2-0 */
+      tms9918->currentAddress = tms9918->regWriteStage0Value
+        | ((data & 0x3f) << 8)
+        | ((uint32_t)(TMS_REGISTER(tms9918, 14) & 0x07) << 14);
+#else
       tms9918->currentAddress = tms9918->regWriteStage0Value | ((data & 0x3f) << 8);
+#endif
       if ((data & 0x40) == 0)
       {
         tms9918->readAheadBuffer = tms9918->vram.bytes[(tms9918->currentAddress) & VRAM_MASK];
@@ -223,7 +264,19 @@ inline void vrEmuTms9918WriteAddrImpl(VR_EMU_INST_ARG uint8_t data)
 inline uint8_t vrEmuTms9918ReadStatusImpl(VR_EMU_INST_ONLY_ARG)
 {
   tms9918->regWriteStage = 0;
-  
+
+#if VR_EMU_TMS9918_MODE == VR_EMU_TMS9918_MODE_V9938
+  /* V9938: R#15 selects which status register to read; resets to 0 after read */
+  uint8_t statIdx = TMS_REGISTER(tms9918, 0x0F) & 0x0f;
+  uint8_t result = TMS_STATUS(tms9918, statIdx);
+  if (statIdx == 0)
+  {
+    /* S#0: clear INT (bit 7), 5S (bit 6), C (bit 5) on read */
+    TMS_STATUS(tms9918, 0) = result & 0x1f;
+  }
+  TMS_REGISTER(tms9918, 0x0F) = 0; /* R#15 resets to 0 after status read */
+  return result;
+#else
   tms9918->palWriteStage = 0;
   TMS_REGISTER(tms9918, 0x2f) &= 0x7f; // reset data port palette mode
 
@@ -237,6 +290,7 @@ inline uint8_t vrEmuTms9918ReadStatusImpl(VR_EMU_INST_ONLY_ARG)
   {
     return TMS_STATUS(tms9918, TMS_REGISTER(tms9918, 0x0F) & 0x0F);
   }
+#endif
 }
 
 /* Function:  vrEmuTms9918PeekStatus
@@ -352,3 +406,33 @@ inline void vrEmuTms9918SetStatusImpl(VR_EMU_INST_ARG uint8_t status)
 {
   TMS_STATUS(tms9918, 0) = status;
 }
+
+#if VR_EMU_TMS9918_MODE == VR_EMU_TMS9918_MODE_V9938
+/* Function:  vrEmuTms9918WritePaletteImpl
+ * ----------------------------------------
+ * V9938 palette port write (MODE1=1, MODE0=0 during CSW)
+ *
+ * V9938 palette format (2-byte write sequence):
+ *   Byte 1: 0RRR0BBB  (3-bit red in bits 6-4, 3-bit blue in bits 2-0)
+ *   Byte 2: 00000GGG  (3-bit green in bits 2-0)
+ * R#16 holds palette index (0-15), auto-increments after each complete write.
+ */
+inline void vrEmuTms9918WritePaletteImpl(VR_EMU_INST_ARG uint8_t data)
+{
+  if (tms9918->palWriteStage == 0)
+  {
+    tms9918->palWriteStage0Value = data;  /* 0RRR0BBB */
+    tms9918->palWriteStage = 1;
+  }
+  else
+  {
+    tms9918->palWriteStage = 0;
+    uint8_t palIdx = TMS_REGISTER(tms9918, 0x10) & 0x0f;  /* R#16 */
+    /* Store as uint16_t: low byte = 0RRR0BBB, high byte = 00000GGG */
+    tms9918->v9938Palette[palIdx] = tms9918->palWriteStage0Value | ((uint16_t)data << 8);
+    tms9918->palDirty = 1;
+    /* R#16 auto-increments after each complete 2-byte write */
+    TMS_REGISTER(tms9918, 0x10) = (palIdx + 1) & 0x0f;
+  }
+}
+#endif /* VR_EMU_TMS9918_MODE_V9938 */

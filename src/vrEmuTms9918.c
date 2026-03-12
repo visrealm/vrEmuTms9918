@@ -79,12 +79,45 @@ vrEmuTms9918Mode r1Modes [] = { TMS_MODE_GRAPHICS_I, TMS_MODE_MULTICOLOR, TMS_MO
 
 static inline vrEmuTms9918Mode tmsMode(VrEmuTms9918* tms9918)
 {
+#if VR_EMU_TMS9918_MODE == VR_EMU_TMS9918_MODE_V9938
+  /* V9938 mode bits:
+   *   M1 = R#1[4]  M2 = R#1[3]
+   *   M3 = R#0[1]  M4 = R#0[2]  M5 = R#0[3]
+   *
+   * Mode table (M5,M4,M3,M2,M1):
+   *   00000 = G1   10000 = T1   01000 = MC   00100 = G2
+   *   00010 = G3   01010 = T2
+   *   00001 = G4   01001 = G5   00101 = G6   00111 = G7
+   * (Verify against V9938 Technical Data Book Table 3.1)
+   */
+  const uint8_t r0 = TMS_REGISTER(tms9918, 0);
+  const uint8_t r1 = TMS_REGISTER(tms9918, 1);
+  const uint8_t M1 = (r1 >> 4) & 1;
+  const uint8_t M2 = (r1 >> 3) & 1;
+  const uint8_t M3 = (r0 >> 1) & 1;
+  const uint8_t M4 = (r0 >> 2) & 1;
+  const uint8_t M5 = (r0 >> 3) & 1;
+
+  if (M5)
+  {
+    if (M4 && M3) return TMS_MODE_G7;
+    if (M4)       return TMS_MODE_G5;
+    if (M3)       return TMS_MODE_G6;
+    return          TMS_MODE_G4;
+  }
+  if (M4)  return M1 ? TMS_MODE_TEXT2 : TMS_MODE_G3;
+  if (M3)  return TMS_MODE_GRAPHICS_II;
+  if (M1)  return TMS_MODE_TEXT;
+  if (M2)  return TMS_MODE_MULTICOLOR;
+  return TMS_MODE_GRAPHICS_I;
+#else
   if (TMS_REGISTER(tms9918, TMS_REG_0) & TMS_R0_MODE_GRAPHICS_II)
     return TMS_MODE_GRAPHICS_II;
   else if (TMS_REGISTER(tms9918, TMS_REG_0) & TMS_R0_MODE_TEXT_80)
     return TMS_MODE_TEXT80;
-  else 
+  else
     return r1Modes [(TMS_REGISTER(tms9918, TMS_REG_1) & (TMS_R1_MODE_MULTICOLOR | TMS_R1_MODE_TEXT)) >> 3];
+#endif
 }
 
 /* Function:  tmsSpriteSize
@@ -226,7 +259,7 @@ static void tmsMemset(uint8_t* ptr, uint8_t val8, int count, bool wait)
   if (wait) dma_channel_wait_for_finish_blocking(dma8);
 }
 
-// default palette 0xARGB
+// default palette 0xARGB (F18A format: 4-bit R, G, B, A nibbles)
 static const uint16_t defaultPalette[] = {
   //-- Palette 0, Deafult TMS9918A palette
   0x0000, 0xF000, 0xF2C3, 0xF5D6, 0xF54F, 0xF76F, 0xFD54, 0xF4EF, 0xFF54, 0xFF76, 0xFDC3, 0xFED6, 0xF2B2, 0xFC5C, 0xFCCC, 0xFFFF,
@@ -238,8 +271,48 @@ static const uint16_t defaultPalette[] = {
   0x0000, 0xF555, 0xF000, 0xF00A, 0xF000, 0xF0A0, 0xF000, 0xF0AA, 0xF000, 0xFA00, 0xF000, 0xFA0A, 0xF000, 0xFA50, 0xF000, 0xFFFF
 };
 
+#if VR_EMU_TMS9918_MODE == VR_EMU_TMS9918_MODE_V9938
+/* V9938 default palette (format: low=0RRR0BBB, high=00000GGG)
+ * Maps to the standard 16 TMS9918A colors in 3-bit-per-channel RGB.
+ * Source: V9938 Technical Data Book, Table 5.3 */
+static const uint16_t v9938DefaultPalette[16] = {
+  0x0000, /* 0  Transparent */
+  0x0000, /* 1  Black       */
+  0x0611, /* 2  Med Green   R=1 G=6 B=1 */
+  0x0733, /* 3  Lt Green    R=3 G=7 B=3 */
+  0x0117, /* 4  Dk Blue     R=1 G=1 B=7 */
+  0x0237, /* 5  Lt Blue     R=3 G=2 B=7 */
+  0x0151, /* 6  Dk Red      R=5 G=1 B=1 */
+  0x0736, /* 7  Cyan        R=3 G=7 B=6 */
+  0x0271, /* 8  Med Red     R=7 G=2 B=1 */
+  0x0373, /* 9  Lt Red      R=7 G=3 B=3 */
+  0x0661, /* 10 Dk Yellow   R=6 G=6 B=1 */
+  0x0663, /* 11 Lt Yellow   R=6 G=6 B=3 */
+  0x0411, /* 12 Dk Green    R=1 G=4 B=1 */
+  0x0255, /* 13 Magenta     R=5 G=2 B=5 */
+  0x0555, /* 14 Gray        R=5 G=5 B=5 */
+  0x0777, /* 15 White       R=7 G=7 B=7 */
+};
+#endif /* VR_EMU_TMS9918_MODE_V9938 */
+
 static void __attribute__ ((noinline)) vdpRegisterReset(VrEmuTms9918* tms9918)
 {
+#if VR_EMU_TMS9918_MODE == VR_EMU_TMS9918_MODE_V9938
+  /* V9938: all 47 registers always accessible, no lock/unlock mechanism */
+  tms9918->restart = 0;
+  tms9918->lockedMask = 0x3f;
+  tms9918->isUnlocked = true;
+  tms9918->unlockCount = 0;
+  memset(&TMS_REGISTER(tms9918, 0), 0, TMS_REGISTERS);
+  /* V9938 power-on register defaults (V9938 TDB Table 5.2) */
+  TMS_REGISTER(tms9918, 0x01) = 0x00; /* display off */
+  TMS_REGISTER(tms9918, 0x03) = 0xff; /* color table: all 1s */
+  TMS_REGISTER(tms9918, 0x04) = 0x03; /* pattern table */
+  TMS_REGISTER(tms9918, 0x05) = 0xff; /* sprite attribute table */
+  TMS_REGISTER(tms9918, 0x06) = 0x00; /* sprite pattern table */
+  TMS_REGISTER(tms9918, 0x07) = 0x00; /* text/background color */
+  TMS_REGISTER(tms9918, 0x09) = 0x02; /* 192 lines, no interlace, NTSC */
+#else
   tms9918->isUnlocked = false;
   tms9918->restart = 0;
   tms9918->unlockCount = 0;
@@ -255,6 +328,7 @@ static void __attribute__ ((noinline)) vdpRegisterReset(VrEmuTms9918* tms9918)
   TMS_REGISTER(tms9918, 0x30) = 1; // vram address increment register
   TMS_REGISTER(tms9918, 0x33) = MAX_SPRITES; // Sprites to process
   TMS_REGISTER(tms9918, 0x36) = 0x40;
+#endif
 }
 
 
@@ -266,13 +340,29 @@ VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918Reset)(VR_EMU_INS
 {
   tms9918->regWriteStage0Value = 0;
   tms9918->currentAddress = 0;
-  tms9918->gpuAddress = 0xFFFF; // "Odd" don't start value
   tms9918->regWriteStage = 0;
+  tms9918->palWriteStage = 0;
   memset(&TMS_STATUS(tms9918, 0), 0, TMS_STATUS_REGISTERS);
   TMS_STATUS(tms9918, 0) = 0x1f;
+  tms9918->readAheadBuffer = 0;
+
+#if VR_EMU_TMS9918_MODE == VR_EMU_TMS9918_MODE_V9938
+  tms9918->gpuAddress = 0; /* not used for V9938 */
+  tms9918->cmdActive = 0;
+  TMS_STATUS(tms9918, 1) = 0x00; /* V9938 ID in S#1 bits 7-1: 0x00 = V9938 */
+
+  vdpRegisterReset(tms9918);
+  tmsCachedMode = TMS_MODE_GRAPHICS_I;
+
+  /* V9938 power-on palette */
+  for (int i = 0; i < 16; ++i)
+  {
+    tms9918->v9938Palette[i] = v9938DefaultPalette[i];
+  }
+#else
+  tms9918->gpuAddress = 0xFFFF; // "Odd" don't start value
   TMS_STATUS(tms9918, 1) = 0xE8;  // ID = F18A (0xE0) set 0x08 for anyone who cares it's not a real one
   TMS_STATUS(tms9918, 14) = 0x1A; // Version
-  tms9918->readAheadBuffer = 0;
 
   vdpRegisterReset(tms9918);
   TMS_REGISTER(tms9918, 0x01) = 0x00; // turn display off
@@ -284,6 +374,7 @@ VR_EMU_TMS9918_DLLEXPORT void __time_critical_func(vrEmuTms9918Reset)(VR_EMU_INS
   {
     tms9918->vram.map.pram[i] = __builtin_bswap16(defaultPalette[i]);
   }
+#endif
 
   /* ram intentionally left in unknown state */
 }
@@ -2176,6 +2267,299 @@ static void __time_critical_func(vrEmuTms9918MulticolorScanLine)(VR_EMU_INST_ARG
   }
 }
 	
+#if VR_EMU_TMS9918_MODE == VR_EMU_TMS9918_MODE_V9938
+
+/* --------------------------------------------------------------------------
+ * V9938 VRAM address helpers
+ *
+ * Note: All address formulas should be verified against the V9938 Technical
+ * Data Book (Blue Book) Table 3.3 before shipping.
+ * --------------------------------------------------------------------------*/
+
+/* G4/G5/G6/G7 name table base: R#2 bits 6-1 select 2KB page within 128KB */
+static inline uint32_t v9938NameTableAddr(VrEmuTms9918* tms9918)
+{
+  return ((uint32_t)(TMS_REGISTER(tms9918, 2) & 0x7e) << 10) & VRAM_MASK;
+}
+
+/* T2 name table: R#10[2:0] provide upper bits, R#2[3:0] lower bits → 1KB pages */
+static inline uint32_t v9938T2NameTableAddr(VrEmuTms9918* tms9918)
+{
+  return (((uint32_t)(TMS_REGISTER(tms9918, 10) & 0x07) << 3)
+         | (TMS_REGISTER(tms9918, 2) & 0x07)) << 10;
+}
+
+/* T2 color (attribute) table: R#10[2:0] + R#3[7:0] → 64-byte pages */
+static inline uint32_t v9938T2ColorTableAddr(VrEmuTms9918* tms9918)
+{
+  return (((uint32_t)(TMS_REGISTER(tms9918, 10) & 0x07) << 8)
+         | TMS_REGISTER(tms9918, 3)) << 6;
+}
+
+/* Sprite attribute table for Sprite Mode 2: R#5[6:0] + R#11[1:0] → 512B pages */
+static inline uint32_t v9938SpriteAttrTableAddr(VrEmuTms9918* tms9918)
+{
+  return (((uint32_t)(TMS_REGISTER(tms9918, 11) & 0x03) << 7)
+         | (TMS_REGISTER(tms9918, 5) & 0x7f)) << 7;
+}
+
+/* Sprite colour table (Mode 2): sprite attribute table base + 0x200 */
+static inline uint32_t v9938SpriteColorTableAddr(VrEmuTms9918* tms9918)
+{
+  return (v9938SpriteAttrTableAddr(tms9918) + 0x200) & VRAM_MASK;
+}
+
+/* V9938 background colour index from R#7 */
+static inline uint8_t v9938BgColor(VrEmuTms9918* tms9918)
+{
+  return TMS_REGISTER(tms9918, 7) & 0x0f;
+}
+
+/* V9938 foreground (text) colour index from R#7 */
+static inline uint8_t v9938FgColor(VrEmuTms9918* tms9918)
+{
+  return (TMS_REGISTER(tms9918, 7) >> 4) & 0x0f;
+}
+
+/* --------------------------------------------------------------------------
+ * V9938 G4 scanline renderer
+ * Resolution: 256×192/212, 4bpp (16 palette colours)
+ * VRAM layout: 1 byte = 2 adjacent pixels (high nibble = left, low = right)
+ * 128 bytes per row
+ * --------------------------------------------------------------------------*/
+static void __time_critical_func(vrEmuTms9918G4ScanLine)(VR_EMU_INST_ARG uint16_t y, uint8_t pixels[TMS9918_PIXELS_X])
+{
+  const uint32_t base = v9938NameTableAddr(tms9918);
+  const uint8_t* src = tms9918->vram.bytes + base + (uint32_t)y * (TMS9918_PIXELS_X / 2);
+  uint8_t* dst = pixels;
+  uint8_t* end = pixels + TMS9918_PIXELS_X;
+
+  dma_channel_wait_for_finish_blocking(dma32);
+
+  while (dst < end)
+  {
+    uint8_t b = *src++;
+    *dst++ = b >> 4;       /* even pixel: upper nibble */
+    *dst++ = b & 0x0f;    /* odd pixel:  lower nibble */
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * V9938 G5 scanline renderer
+ * Resolution: 512×192/212, 2bpp (4 palette colours)
+ * VRAM layout: 1 byte = 4 pixels, 2 bits each (MSB = leftmost)
+ * 128 bytes per row
+ * Output: nibble-packed buffer (same as Text80) — 2 pixels per byte
+ * --------------------------------------------------------------------------*/
+static void __time_critical_func(vrEmuTms9918G5ScanLine)(VR_EMU_INST_ARG uint16_t y, uint8_t pixels[TMS9918_PIXELS_X])
+{
+  const uint32_t base = v9938NameTableAddr(tms9918);
+  const uint8_t* src = tms9918->vram.bytes + base + (uint32_t)y * 128;
+  uint8_t* dst = pixels;
+  uint8_t* end = pixels + TMS9918_PIXELS_X;
+
+  dma_channel_wait_for_finish_blocking(dma32);
+
+  /* Each VRAM byte encodes 4 2-bit pixels.
+   * Pack into output as 2 nibbles: pixel[2n] in high nibble, pixel[2n+1] in low.
+   * One VRAM byte → two output bytes. */
+  while (dst < end)
+  {
+    uint8_t b = *src++;
+    *dst++ = ((b >> 6) & 0x03) << 4 | ((b >> 4) & 0x03); /* pixels 0,1 */
+    *dst++ = ((b >> 2) & 0x03) << 4 | ((b >> 0) & 0x03); /* pixels 2,3 */
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * V9938 G6 scanline renderer
+ * Resolution: 512×192/212, 4bpp (16 palette colours)
+ * VRAM layout: 1 byte = 2 adjacent pixels (high nibble = left, low = right)
+ * 256 bytes per row (already nibble-packed — identical format to output buffer)
+ * --------------------------------------------------------------------------*/
+static void __time_critical_func(vrEmuTms9918G6ScanLine)(VR_EMU_INST_ARG uint16_t y, uint8_t pixels[TMS9918_PIXELS_X])
+{
+  const uint32_t base = v9938NameTableAddr(tms9918);
+  const uint8_t* src = tms9918->vram.bytes + base + (uint32_t)y * TMS9918_PIXELS_X;
+
+  dma_channel_wait_for_finish_blocking(dma32);
+
+  /* VRAM is already nibble-packed — direct copy into output buffer */
+  memcpy(pixels, src, TMS9918_PIXELS_X);
+}
+
+/* --------------------------------------------------------------------------
+ * V9938 G7 scanline renderer
+ * Resolution: 256×192/212, 8bpp (256 direct colours via palette lookup)
+ * VRAM layout: 1 byte per pixel, direct colour index
+ * 256 bytes per row
+ * --------------------------------------------------------------------------*/
+static void __time_critical_func(vrEmuTms9918G7ScanLine)(VR_EMU_INST_ARG uint16_t y, uint8_t pixels[TMS9918_PIXELS_X])
+{
+  const uint32_t base = v9938NameTableAddr(tms9918);
+  const uint8_t* src = tms9918->vram.bytes + base + (uint32_t)y * TMS9918_PIXELS_X;
+
+  dma_channel_wait_for_finish_blocking(dma32);
+
+  memcpy(pixels, src, TMS9918_PIXELS_X);
+}
+
+/* --------------------------------------------------------------------------
+ * V9938 Text 2 scanline renderer
+ * Resolution: 80-column × 24/26.5 rows, 6px wide characters
+ * Per-character colour from colour table (byte: bits 7-4 = fg, 3-0 = bg)
+ * Blink attribute: bit 3 of colour table byte enables blink
+ * Output: nibble-packed buffer (2 pixels per byte) — same as Text80
+ * --------------------------------------------------------------------------*/
+static void __time_critical_func(vrEmuTms9918Text2ScanLine)(VR_EMU_INST_ARG uint16_t y, uint8_t pixels[TMS9918_PIXELS_X])
+{
+  const uint8_t tileY    = y >> 3;
+  const uint8_t pattRow  = y & 0x07;
+  const uint32_t nameBase  = v9938T2NameTableAddr(tms9918);
+  const uint32_t colorBase = v9938T2ColorTableAddr(tms9918);
+
+  const uint8_t* nameTable    = tms9918->vram.bytes + nameBase  + (uint32_t)tileY * TEXT80_NUM_COLS;
+  const uint8_t* colorTable   = tms9918->vram.bytes + colorBase + (uint32_t)tileY * TEXT80_NUM_COLS;
+  const uint8_t* patternTable = tms9918->vram.bytes + tmsPatternTableAddr(tms9918) + pattRow;
+
+  /* Determine blink phase from R#13 (blink period); simplified: use frame counter */
+  /* TODO: implement proper blink timing via R#13 when frame counter is available */
+  const bool blinkPhase = false; /* placeholder: always non-blink phase */
+
+  const uint8_t globalFg = v9938FgColor(tms9918);  /* R#7 high nibble */
+  const uint8_t globalBg = v9938BgColor(tms9918);  /* R#7 low  nibble */
+
+  pixels += TEXT_PADDING_PX;  /* 8px left border padding */
+
+  dma_channel_wait_for_finish_blocking(dma32);
+
+  for (uint8_t tileX = 0; tileX < TEXT80_NUM_COLS; ++tileX)
+  {
+    const uint8_t nameIdx  = *nameTable++;
+    const uint8_t attr     = *colorTable++;
+    /* attr: bits 7-4 = fg colour (if non-zero), 3-0 = bg colour (if non-zero)
+     * bit 3 = blink enable (attr & 0x08). If blinking and in blink-off phase,
+     * swap to the blink colours from R#12. */
+    const bool doBlink = (attr & 0x08) && blinkPhase;
+    const uint8_t fg = doBlink ? ((TMS_REGISTER(tms9918, 12) >> 4) & 0x0f)
+                               : ((attr >> 4) ? (attr >> 4) : globalFg);
+    const uint8_t bg = doBlink ? (TMS_REGISTER(tms9918, 12) & 0x0f)
+                               : ((attr & 0x07) ? (attr & 0x07) : globalBg);
+
+    const uint8_t pattByte = patternTable[nameIdx * PATTERN_BYTES];
+
+    /* Render 6 pixels as 3 nibble-packed output bytes */
+    for (uint8_t pattBit = 6; pattBit > 1; pattBit -= 2)
+    {
+      const uint8_t twoPix = (pattByte >> pattBit) & 0x03;
+      *pixels++ = ((twoPix & 0x02) ? fg : bg) << 4 | ((twoPix & 0x01) ? fg : bg);
+    }
+  }
+}
+
+/* --------------------------------------------------------------------------
+ * V9938 Sprite Mode 2 renderer
+ * Up to 9 sprites per scanline (vs 4 in Mode 1)
+ * Sprite colours from separate colour table rather than attribute byte
+ * --------------------------------------------------------------------------*/
+#define V9938_MAX_SCANLINE_SPRITES 9
+
+static uint8_t __time_critical_func(vrEmuTms9918OutputSprites2)(VR_EMU_INST_ARG uint16_t y, uint8_t pixels[TMS9918_PIXELS_X])
+{
+  const uint8_t spriteSize = tmsSpriteSize(tms9918);
+  const bool    spriteMag  = tmsSpriteMag(tms9918);
+  const uint8_t spriteStep = spriteMag ? spriteSize * 2 : spriteSize;
+
+  const uint32_t satBase = v9938SpriteAttrTableAddr(tms9918);
+  const uint32_t sctBase = v9938SpriteColorTableAddr(tms9918);
+  const uint32_t sptBase = tmsSpritePatternTableAddr(tms9918);
+
+  const uint8_t* sat = tms9918->vram.bytes + satBase;
+  const uint8_t* spt = tms9918->vram.bytes + sptBase;
+
+  uint8_t tempStatus = 0;
+  uint8_t spritesOnLine = 0;
+  uint8_t firstSprite = 0xff;
+
+  dma_channel_wait_for_finish_blocking(dma32);
+
+  for (uint8_t sIdx = 0; sIdx < MAX_SPRITES; ++sIdx)
+  {
+    const uint8_t* sAttr = sat + sIdx * SPRITE_ATTR_BYTES;
+    uint8_t spriteY = sAttr[SPRITE_ATTR_Y];
+
+    if (spriteY == LAST_SPRITE_YPOS) break; /* terminator */
+
+    /* Check if this sprite is on scanline y */
+    int16_t sy = (int16_t)spriteY + 1;  /* +1: sprite Y is one less than screen row */
+    if (sy == 0) sy = 256; /* special case: y=0xFF means bottom of screen */
+
+    int16_t dy = (int16_t)y - sy;
+    if (dy < 0 || dy >= spriteStep) continue;
+
+    ++spritesOnLine;
+    if (spritesOnLine > V9938_MAX_SCANLINE_SPRITES)
+    {
+      /* More than 9 sprites on this line: set overflow in S#0 */
+      tempStatus |= STATUS_5S | (sIdx & 0x1f);
+      break;
+    }
+
+    if (firstSprite == 0xff) firstSprite = sIdx;
+
+    const uint8_t spriteX    = sAttr[SPRITE_ATTR_X];
+    const uint8_t spriteName = sAttr[SPRITE_ATTR_NAME]
+                               & (spriteSize == 16 ? 0xfc : 0xff);
+
+    /* Colour from separate sprite colour table (Mode 2).
+     * Each sprite has 16 colour bytes (one per pattern row, for 16×16 sprites)
+     * or 1 byte (for 8×8 sprites, row 0 is used). */
+    const uint8_t* sColRow = tms9918->vram.bytes + sctBase + sIdx * 16;
+    const int16_t pattRow = spriteMag ? (dy >> 1) : dy;
+    uint8_t spriteColor = sColRow[pattRow & 0x0f] & 0x0f;
+
+    if (spriteColor == 0) continue; /* transparent */
+
+    /* Collision detection */
+    for (uint8_t p = 0; p < spriteSize; ++p)
+    {
+      const uint8_t* pattPtr = spt + spriteName * PATTERN_BYTES * 2;
+      if (spriteSize == 16)
+      {
+        const int16_t ppRow = spriteMag ? (dy >> 1) : dy;
+        pattPtr += (ppRow < 8) ? ppRow : (PATTERN_BYTES + ppRow - 8);
+      }
+      else
+      {
+        pattPtr += (spriteMag ? (dy >> 1) : dy);
+      }
+
+      uint8_t pattByte = *pattPtr;
+      for (uint8_t bit = 0; bit < 8; ++bit)
+      {
+        if (pattByte & 0x80)
+        {
+          int16_t px = (int16_t)spriteX + (spriteMag ? (p * 2) : p)
+                       + (int16_t)bit * (spriteMag ? 2 : 1);
+          if (px >= 0 && px < TMS9918_PIXELS_X)
+          {
+            if (pixels[px])
+              tempStatus |= STATUS_COL; /* collision */
+            pixels[px] = spriteColor;
+            if (spriteMag && px + 1 < TMS9918_PIXELS_X)
+              pixels[px + 1] = spriteColor;
+          }
+        }
+        pattByte <<= 1;
+      }
+    }
+  }
+
+  return tempStatus;
+}
+
+#endif /* VR_EMU_TMS9918_MODE_V9938 */
+
 /* Function:  vrEmuTms9918ScanLine
  * ----------------------------------------
  * generate a scanline
@@ -2202,7 +2586,13 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ScanLine)(VR_E
 
   /* clear the buffer with background color */
   bg = repeatedPalette[tmsMainBgColor(tms9918)];
-  if (tmsCachedMode == TMS_MODE_TEXT80) bg |= bg << 4;
+  if (tmsCachedMode == TMS_MODE_TEXT80
+#if VR_EMU_TMS9918_MODE == VR_EMU_TMS9918_MODE_V9938
+      || tmsCachedMode == TMS_MODE_G5
+      || tmsCachedMode == TMS_MODE_G6
+      || tmsCachedMode == TMS_MODE_TEXT2
+#endif
+     ) bg |= bg << 4;
   dma_channel_set_write_addr(dma32, pixels, true);
 
   bool dispActive = (TMS_REGISTER(tms9918, TMS_REG_1) & TMS_R1_DISP_ACTIVE);
@@ -2252,6 +2642,37 @@ VR_EMU_TMS9918_DLLEXPORT uint8_t __time_critical_func(vrEmuTms9918ScanLine)(VR_E
         if (tms9918->isUnlocked)
           tempStatus = vrEmuTms9918OutputSprites(VR_EMU_INST y, pixels);
         break;
+
+#if VR_EMU_TMS9918_MODE == VR_EMU_TMS9918_MODE_V9938
+      case TMS_MODE_G3:
+        vrEmuTms9918GraphicsIIScanLine(VR_EMU_INST y, pixels);
+        tempStatus = vrEmuTms9918OutputSprites2(VR_EMU_INST y, pixels);
+        break;
+
+      case TMS_MODE_G4:
+        vrEmuTms9918G4ScanLine(VR_EMU_INST y, pixels);
+        tempStatus = vrEmuTms9918OutputSprites2(VR_EMU_INST y, pixels);
+        break;
+
+      case TMS_MODE_G5:
+        vrEmuTms9918G5ScanLine(VR_EMU_INST y, pixels);
+        tempStatus = vrEmuTms9918OutputSprites2(VR_EMU_INST y, pixels);
+        break;
+
+      case TMS_MODE_G6:
+        vrEmuTms9918G6ScanLine(VR_EMU_INST y, pixels);
+        tempStatus = vrEmuTms9918OutputSprites2(VR_EMU_INST y, pixels);
+        break;
+
+      case TMS_MODE_G7:
+        vrEmuTms9918G7ScanLine(VR_EMU_INST y, pixels);
+        tempStatus = vrEmuTms9918OutputSprites2(VR_EMU_INST y, pixels);
+        break;
+
+      case TMS_MODE_TEXT2:
+        vrEmuTms9918Text2ScanLine(VR_EMU_INST y, pixels);
+        break;
+#endif /* VR_EMU_TMS9918_MODE_V9938 */
     }
   }
 
@@ -2275,6 +2696,47 @@ uint8_t __time_critical_func(vrEmuTms9918RegValue)(VR_EMU_INST_ARG vrEmuTms9918R
 VR_EMU_TMS9918_DLLEXPORT
 void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms9918Register reg, uint8_t value)
 {
+#if VR_EMU_TMS9918_MODE == VR_EMU_TMS9918_MODE_V9938
+  /* V9938: all 47 registers always accessible (lockedMask = 0x3f).
+   * Register write format: second byte of 2-byte sequence = 0x80 | reg_num (bits 5-0).
+   * Bit 6 of the second byte must be 0 for a register write (vs address write). */
+  if ((reg & ~0x3f) != 0x80) return; /* bit 7 must be set, bit 6 clear */
+
+  const int regIndex = reg & 0x3f;
+  TMS_REGISTER(tms9918, regIndex) = value;
+
+  /* V9938 register side effects */
+  switch (regIndex)
+  {
+    case 14: /* R#14: VRAM bank select (A16-A14) - currentAddress upper bits already
+                applied by WriteAddrImpl; here we just keep register updated */
+      break;
+
+    case 15: /* R#15: status register pointer - no side effect, just store */
+      break;
+
+    case 16: /* R#16: palette address register - index for next palette write */
+      tms9918->palWriteStage = 0; /* reset palette write sequence */
+      break;
+
+    case 17: /* R#17: control register pointer (indirect register access) */
+      break;
+
+    case 19: /* R#19: interrupt line register - scanline interrupt target */
+      break;
+
+    case 23: /* R#23: display offset (vertical scroll) */
+      break;
+
+    case 46: /* R#46: command register - execute VDP command */
+      TMS_STATUS(tms9918, 2) |= 0x01; /* CE bit: command executing */
+      tms9918->restart = 1;           /* signal Core 0 command processor */
+      break;
+
+    default:
+      break;
+  }
+#else
   if ((reg == (0x80 | 0x39)) && ((value & 0xfc) == 0x1c))
   {
     TMS_REGISTER(tms9918, 0x39) = 0x1c; // Allow this one through even when locked
@@ -2289,25 +2751,11 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
   else
   {
     tms9918->unlockCount = 0;
-    
+
     if ((reg & ~tms9918->lockedMask) != 0x80) return; //ignore higher registers when locked
 
     int regIndex = reg & tms9918->lockedMask; // was 0x07
-    
-    // Auto-lock if we're unlocked but register 0 is being written
-    // This handles case where system resets without resetting VDP (common on ColecoVision)
-    // Legitimate F18A code should unlock after writing R0, so this is safe
-    if (false && tms9918->isUnlocked && regIndex == 0)
-    {
-      // Force re-lock to standard TMS9918 mode
-      tms9918->isUnlocked = false;
-      tms9918->lockedMask = 0x07;
-      tms9918->unlockCount = 0;
-      // Don't call vdpRegisterReset as that would reset all registers
-      // Just ensure sprite limit is back to normal
-      TMS_REGISTER(tms9918, 0x1e) = MAX_SPRITES - 1;
-    }
-    
+
     TMS_REGISTER(tms9918, regIndex) = value;
 
     if (regIndex < 0x0f) return;
@@ -2360,7 +2808,7 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
       uint8_t statReg = (value & 0x0f);
       TMS_STATUS(tms9918, 0x0F) = statReg;  // is this right? or should this be the read-ahead value?
       if (value & 0x40) tms9918->startTime = time_us_32();    // reset
-      if (value & 0x20) tms9918->currentTime = time_us_32();  // snap      
+      if (value & 0x20) tms9918->currentTime = time_us_32();  // snap
       else if (value & 0x10) tms9918->startTime += (tms9918->stopTime - tms9918->startTime);
       else tms9918->currentTime = tms9918->stopTime = time_us_32();
 
@@ -2370,7 +2818,7 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
         divmod_result_t micro = divmod_u32u32(elapsed, 1000);
         divmod_result_t milli = divmod_u32u32(to_quotient_u32(micro), 1000);
 
-        TMS_STATUS(tms9918, 0x06) = to_remainder_u32(micro) & 0x0ff; 
+        TMS_STATUS(tms9918, 0x06) = to_remainder_u32(micro) & 0x0ff;
         TMS_STATUS(tms9918, 0x07) = to_remainder_u32(micro) >> 8;
         TMS_STATUS(tms9918, 0x08) = to_remainder_u32(milli) & 0x0ff;
         TMS_STATUS(tms9918, 0x09) = to_remainder_u32(milli) >> 8;
@@ -2389,6 +2837,7 @@ void __time_critical_func(vrEmuTms9918WriteRegValue)(VR_EMU_INST_ARG vrEmuTms991
       tms9918->configDirty = true;
     }
   }
+#endif /* VR_EMU_TMS9918_MODE_V9938 */
 }
 
 
