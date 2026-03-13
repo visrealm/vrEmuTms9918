@@ -188,8 +188,9 @@ struct vrEmuTMS9918_s
   bool scanlineHasSprites;
 
 #if VR_EMU_TMS9918_MODE == VR_EMU_TMS9918_MODE_V9938
-  /* V9938 9-bit palette: byte0 = 0RRR0BBB, byte1 = 00000GGG
-   * Stored as uint16_t: low byte = RRR0BBB, high byte = 00000GGG */
+  /* V9938 palette stored in F18A format: 0xARGB (4-bit per channel, alpha=0xF)
+   * Matches defaultPalette[] and config layout; conversion from V9938 3-bit
+   * wire format happens in vrEmuTms9918WritePaletteImpl(). */
   uint16_t v9938Palette[16];
 
   /* V9938 command processor state */
@@ -422,9 +423,11 @@ inline void vrEmuTms9918SetStatusImpl(VR_EMU_INST_ARG uint8_t status)
  * ----------------------------------------
  * V9938 palette port write (MODE1=1, MODE0=0 during CSW)
  *
- * V9938 palette format (2-byte write sequence):
+ * V9938 wire format (2-byte write sequence):
  *   Byte 1: 0RRR0BBB  (3-bit red in bits 6-4, 3-bit blue in bits 2-0)
  *   Byte 2: 00000GGG  (3-bit green in bits 2-0)
+ * Stored internally as F18A format: 0xARGB (4-bit per channel, alpha=0xF),
+ * matching the config and defaultPalette layout throughout the system.
  * R#16 holds palette index (0-15), auto-increments after each complete write.
  */
 inline void vrEmuTms9918WritePaletteImpl(VR_EMU_INST_ARG uint8_t data)
@@ -438,8 +441,11 @@ inline void vrEmuTms9918WritePaletteImpl(VR_EMU_INST_ARG uint8_t data)
   {
     tms9918->palWriteStage = 0;
     uint8_t palIdx = TMS_REGISTER(tms9918, 0x10) & 0x0f;  /* R#16 */
-    /* Store as uint16_t: low byte = 0RRR0BBB, high byte = 00000GGG */
-    tms9918->v9938Palette[palIdx] = tms9918->palWriteStage0Value | ((uint16_t)data << 8);
+    /* Convert V9938 3-bit channels to F18A 4-bit format (0xARGB) by doubling (<<1) */
+    uint8_t r4 = ((tms9918->palWriteStage0Value >> 4) & 0x07) << 1;
+    uint8_t b4 = (tms9918->palWriteStage0Value & 0x07) << 1;
+    uint8_t g4 = (data & 0x07) << 1;
+    tms9918->v9938Palette[palIdx] = 0xf000 | ((uint16_t)r4 << 8) | ((uint16_t)g4 << 4) | b4;
     tms9918->palDirty = 1;
     /* R#16 auto-increments after each complete 2-byte write */
     TMS_REGISTER(tms9918, 0x10) = (palIdx + 1) & 0x0f;

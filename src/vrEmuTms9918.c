@@ -84,11 +84,14 @@ static inline vrEmuTms9918Mode tmsMode(VrEmuTms9918* tms9918)
    *   M1 = R#1[4]  M2 = R#1[3]
    *   M3 = R#0[1]  M4 = R#0[2]  M5 = R#0[3]
    *
-   * Mode table (M5,M4,M3,M2,M1):
-   *   00000 = G1   10000 = T1   01000 = MC   00100 = G2
-   *   00010 = G3   01010 = T2
-   *   00001 = G4   01001 = G5   00101 = G6   00111 = G7
-   * (Verify against V9938 Technical Data Book Table 3.1)
+   * Mode table (R#0 bits [3:1] = M5,M4,M3 ; R#1 bits [4:3] = M1,M2):
+   *   M5=0 M4=0 M3=0: G1 / MC / T1 selected by M1,M2
+   *   M5=0 M4=0 M3=1: G2
+   *   M5=0 M4=1 M3=0: G3 (or T2 if M1=1)
+   *   M5=0 M4=1 M3=1: G4  -- 256x192/212, 4bpp
+   *   M5=1 M4=0 M3=0: G5  -- 512x192/212, 2bpp
+   *   M5=1 M4=0 M3=1: G6  -- 512x192/212, 4bpp
+   *   M5=1 M4=1 M3=1: G7  -- 256x192/212, 8bpp
    */
   const uint8_t r0 = TMS_REGISTER(tms9918, 0);
   const uint8_t r1 = TMS_REGISTER(tms9918, 1);
@@ -101,10 +104,10 @@ static inline vrEmuTms9918Mode tmsMode(VrEmuTms9918* tms9918)
   if (M5)
   {
     if (M4 && M3) return TMS_MODE_G7;
-    if (M4)       return TMS_MODE_G5;
     if (M3)       return TMS_MODE_G6;
-    return          TMS_MODE_G4;
+    return          TMS_MODE_G5;
   }
+  if (M4 && M3) return TMS_MODE_G4;
   if (M4)  return M1 ? TMS_MODE_TEXT2 : TMS_MODE_G3;
   if (M3)  return TMS_MODE_GRAPHICS_II;
   if (M1)  return TMS_MODE_TEXT;
@@ -272,26 +275,26 @@ static const uint16_t defaultPalette[] = {
 };
 
 #if VR_EMU_TMS9918_MODE == VR_EMU_TMS9918_MODE_V9938
-/* V9938 default palette (format: low=0RRR0BBB, high=00000GGG)
- * Maps to the standard 16 TMS9918A colors in 3-bit-per-channel RGB.
- * Source: V9938 Technical Data Book, Table 5.3 */
+/* V9938 default palette in F18A format: 0xARGB (4-bit per channel, alpha=0xF).
+ * V9938 TDB Table 5.3 colors (3-bit R,G,B) scaled to 4-bit by doubling (x2).
+ * Using the same layout as defaultPalette[] keeps config/reset handling unified. */
 static const uint16_t v9938DefaultPalette[16] = {
-  0x0000, /* 0  Transparent */
-  0x0000, /* 1  Black       */
-  0x0611, /* 2  Med Green   R=1 G=6 B=1 */
-  0x0733, /* 3  Lt Green    R=3 G=7 B=3 */
-  0x0117, /* 4  Dk Blue     R=1 G=1 B=7 */
-  0x0237, /* 5  Lt Blue     R=3 G=2 B=7 */
-  0x0151, /* 6  Dk Red      R=5 G=1 B=1 */
-  0x0736, /* 7  Cyan        R=3 G=7 B=6 */
-  0x0271, /* 8  Med Red     R=7 G=2 B=1 */
-  0x0373, /* 9  Lt Red      R=7 G=3 B=3 */
-  0x0661, /* 10 Dk Yellow   R=6 G=6 B=1 */
-  0x0663, /* 11 Lt Yellow   R=6 G=6 B=3 */
-  0x0411, /* 12 Dk Green    R=1 G=4 B=1 */
-  0x0255, /* 13 Magenta     R=5 G=2 B=5 */
-  0x0555, /* 14 Gray        R=5 G=5 B=5 */
-  0x0777, /* 15 White       R=7 G=7 B=7 */
+  0x0000, /* 0  Transparent R=0  G=0  B=0  (alpha=0, transparent) */
+  0xF000, /* 1  Black       R=0  G=0  B=0  */
+  0xF2C2, /* 2  Med Green   R=2  G=12 B=2  (V9938: R=1 G=6 B=1) */
+  0xF6E6, /* 3  Lt Green    R=6  G=14 B=6  (V9938: R=3 G=7 B=3) */
+  0xF22E, /* 4  Dk Blue     R=2  G=2  B=14 (V9938: R=1 G=1 B=7) */
+  0xF64E, /* 5  Lt Blue     R=6  G=4  B=14 (V9938: R=3 G=2 B=7) */
+  0xFA22, /* 6  Dk Red      R=10 G=2  B=2  (V9938: R=5 G=1 B=1) */
+  0xF4CE, /* 7  Cyan        R=4  G=12 B=14 (V9938: R=2 G=6 B=7) */
+  0xFE22, /* 8  Med Red     R=14 G=2  B=2  (V9938: R=7 G=1 B=1) */
+  0xFE66, /* 9  Lt Red      R=14 G=6  B=6  (V9938: R=7 G=3 B=3) */
+  0xFCC2, /* 10 Dk Yellow   R=12 G=12 B=2  (V9938: R=6 G=6 B=1) */
+  0xFCC8, /* 11 Lt Yellow   R=12 G=12 B=8  (V9938: R=6 G=6 B=4) */
+  0xF282, /* 12 Dk Green    R=2  G=8  B=2  (V9938: R=1 G=4 B=1) */
+  0xFC4A, /* 13 Magenta     R=12 G=4  B=10 (V9938: R=6 G=2 B=5) */
+  0xFAAA, /* 14 Gray        R=10 G=10 B=10 (V9938: R=5 G=5 B=5) */
+  0xFEEE, /* 15 White       R=14 G=14 B=14 (V9938: R=7 G=7 B=7) */
 };
 #endif /* VR_EMU_TMS9918_MODE_V9938 */
 
@@ -2296,17 +2299,20 @@ static inline uint32_t v9938T2ColorTableAddr(VrEmuTms9918* tms9918)
          | TMS_REGISTER(tms9918, 3)) << 6;
 }
 
-/* Sprite attribute table for Sprite Mode 2: R#5[6:0] + R#11[1:0] → 512B pages */
+/* Sprite attribute table for Sprite Mode 2: R#5[7:2] at A14-A9, R#11[1:0] at A16-A15
+ * 512-byte aligned */
 static inline uint32_t v9938SpriteAttrTableAddr(VrEmuTms9918* tms9918)
 {
-  return (((uint32_t)(TMS_REGISTER(tms9918, 11) & 0x03) << 7)
-         | (TMS_REGISTER(tms9918, 5) & 0x7f)) << 7;
+  return (((uint32_t)(TMS_REGISTER(tms9918, 11) & 0x03) << 15)
+         | ((uint32_t)(TMS_REGISTER(tms9918, 5) & 0xfc) << 7)) & VRAM_MASK;
 }
 
-/* Sprite colour table (Mode 2): sprite attribute table base + 0x200 */
+/* Sprite colour table (Mode 2): R#5[7:3] at A14-A10, R#11[1:0] at A16-A15
+ * 1KB-aligned; independently calculated from SAT address */
 static inline uint32_t v9938SpriteColorTableAddr(VrEmuTms9918* tms9918)
 {
-  return (v9938SpriteAttrTableAddr(tms9918) + 0x200) & VRAM_MASK;
+  return (((uint32_t)(TMS_REGISTER(tms9918, 11) & 0x03) << 15)
+         | ((uint32_t)(TMS_REGISTER(tms9918, 5) & 0xf8) << 7)) & VRAM_MASK;
 }
 
 /* V9938 background colour index from R#7 */
@@ -2520,26 +2526,23 @@ static uint8_t __time_critical_func(vrEmuTms9918OutputSprites2)(VR_EMU_INST_ARG 
 
     if (spriteColor == 0) continue; /* transparent */
 
-    /* Collision detection */
-    for (uint8_t p = 0; p < spriteSize; ++p)
+    /* Render sprite pixels.
+     * For 8x8: one 8-pixel half (half=0 only).
+     * For 16x16: two 8-pixel halves — left (half=0) and right (half=1).
+     * Pattern layout (TMS9918-compatible):
+     *   left  half row: spt + spriteName*8 + pattRow       (bytes 0-7 or 8-15)
+     *   right half row: spt + spriteName*8 + 16 + pattRow  (bytes 16-23 or 24-31)
+     */
+    for (uint8_t half = 0; half < spriteSize / 8; ++half)
     {
-      const uint8_t* pattPtr = spt + spriteName * PATTERN_BYTES * 2;
-      if (spriteSize == 16)
-      {
-        const int16_t ppRow = spriteMag ? (dy >> 1) : dy;
-        pattPtr += (ppRow < 8) ? ppRow : (PATTERN_BYTES + ppRow - 8);
-      }
-      else
-      {
-        pattPtr += (spriteMag ? (dy >> 1) : dy);
-      }
-
+      const uint8_t* pattPtr = spt + spriteName * PATTERN_BYTES
+                               + half * 2 * PATTERN_BYTES + pattRow;
       uint8_t pattByte = *pattPtr;
       for (uint8_t bit = 0; bit < 8; ++bit)
       {
         if (pattByte & 0x80)
         {
-          int16_t px = (int16_t)spriteX + (spriteMag ? (p * 2) : p)
+          int16_t px = (int16_t)spriteX + half * (spriteMag ? 16 : 8)
                        + (int16_t)bit * (spriteMag ? 2 : 1);
           if (px >= 0 && px < TMS9918_PIXELS_X)
           {
