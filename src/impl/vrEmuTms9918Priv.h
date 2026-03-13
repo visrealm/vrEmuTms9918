@@ -56,6 +56,14 @@
 #define VR_EMU_TMS9918_MODE VR_EMU_TMS9918_MODE_TMS9918
 #endif
 
+/* VRAM address auto-increment: F18A uses a configurable register (R#48);
+ * V9938 and TMS9918 always increment by 1. */
+#if VR_EMU_TMS9918_MODE == VR_EMU_TMS9918_MODE_F18A
+  #define TMS_ADDR_INC(t) ((int8_t)TMS_REGISTER(t, 0x30))
+#else
+  #define TMS_ADDR_INC(t) (1)
+#endif
+
 #define BASE_VRAM_SIZE        (1 << 14) /* 16kB */
 
 #if VR_EMU_TMS9918_MODE == VR_EMU_TMS9918_MODE_F18A
@@ -250,7 +258,7 @@ inline void vrEmuTms9918WriteAddrImpl(VR_EMU_INST_ARG uint8_t data)
       if ((data & 0x40) == 0)
       {
         tms9918->readAheadBuffer = tms9918->vram.bytes[(tms9918->currentAddress) & VRAM_MASK];
-        tms9918->currentAddress += (int8_t)TMS_REGISTER(tms9918, 0x30); // increment register
+        tms9918->currentAddress += TMS_ADDR_INC(tms9918); // increment VRAM address
       }
     }
     tms9918->regWriteStage = 0;
@@ -310,19 +318,20 @@ inline uint8_t vrEmuTms9918PeekStatusImpl(VR_EMU_INST_ONLY_ARG)
  */
 inline void vrEmuTms9918WriteDataImpl(VR_EMU_INST_ARG uint8_t data)
 {
+#if VR_EMU_TMS9918_MODE == VR_EMU_TMS9918_MODE_F18A
   if (TMS_REGISTER(tms9918, 0x2f) & 0x80) // data port is in palette mode
   {
     if (tms9918->palWriteStage == 0)
     {
       tms9918->palWriteStage0Value = data & 0x0f;
-      ++tms9918->palWriteStage;      
+      ++tms9918->palWriteStage;
     }
     else
     {
       tms9918->palWriteStage = 0;
 
-      // this looks backwards because ARM is little-endian, TMS9900 is big-endian. 
-      tms9918->vram.map.pram[TMS_REGISTER(tms9918, 0x2f) & 0x3f] = (tms9918->palWriteStage0Value) | (data << 8); 
+      // this looks backwards because ARM is little-endian, TMS9900 is big-endian.
+      tms9918->vram.map.pram[TMS_REGISTER(tms9918, 0x2f) & 0x3f] = (tms9918->palWriteStage0Value) | (data << 8);
       tms9918->palDirty = 1;
 
       // reset data port palette mode
@@ -337,11 +346,12 @@ inline void vrEmuTms9918WriteDataImpl(VR_EMU_INST_ARG uint8_t data)
     }
   }
   else
+#endif /* VR_EMU_TMS9918_MODE_F18A */
   {
     tms9918->regWriteStage = 0;
     tms9918->readAheadBuffer = data;
     tms9918->vram.bytes[(tms9918->currentAddress) & VRAM_MASK] = data;
-    tms9918->currentAddress += (int8_t)TMS_REGISTER(tms9918, 0x30); // increment register
+    tms9918->currentAddress += TMS_ADDR_INC(tms9918); // increment VRAM address
   }
 }
 
@@ -355,7 +365,7 @@ inline uint8_t vrEmuTms9918ReadDataImpl(VR_EMU_INST_ONLY_ARG)
   tms9918->regWriteStage = 0;
   uint8_t currentValue = tms9918->readAheadBuffer;
   tms9918->readAheadBuffer = tms9918->vram.bytes[(tms9918->currentAddress) & VRAM_MASK];
-  tms9918->currentAddress += (int8_t)TMS_REGISTER(tms9918, 0x30); // increment register
+  tms9918->currentAddress += TMS_ADDR_INC(tms9918); // increment VRAM address
   return currentValue;
 }
 
@@ -367,7 +377,7 @@ inline uint8_t vrEmuTms9918ReadAheadDataImpl(VR_EMU_INST_ONLY_ARG)
 {
   tms9918->regWriteStage = 0;
   tms9918->readAheadBuffer = tms9918->vram.bytes[(tms9918->currentAddress) & VRAM_MASK];
-  tms9918->currentAddress += (int8_t)TMS_REGISTER(tms9918, 0x30); // increment register
+  tms9918->currentAddress += TMS_ADDR_INC(tms9918); // increment VRAM address
   return tms9918->readAheadBuffer;
 }
 
