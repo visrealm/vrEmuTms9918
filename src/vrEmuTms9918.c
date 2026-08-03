@@ -581,7 +581,7 @@ static void tmsCopyAlignMask(BitMask dstMask, const BitMask srcMask, int pixelSh
     // Use DMA for aligned copy
     dma_channel_set_read_addr(dma32inc, srcMask, false);
     dma_channel_set_write_addr(dma32inc, dstMask, false);
-    dma_channel_set_trans_count(dma32inc, 9 * sizeof(uint32_t), true);  // 36 bytes, start transfer
+    dma_channel_set_trans_count(dma32inc, 9, true);  // 36 bytes, start transfer
     return;
   }
 
