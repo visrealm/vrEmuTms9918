@@ -1653,6 +1653,29 @@ static inline uint8_t* renderStdTile(
 }
 
 
+/* Function:  tmsAttrTableAddr
+ * ----------------------------------------
+ * base address of the tile attribute row. for position-based attributes, the
+ * name table scroll page bits are added to the color table base, carries and all
+ */
+static inline uint16_t tmsAttrTableAddr(uint16_t colorTableAddr, const uint16_t rowNamesAddr,
+                                        const uint16_t rowOffset, const bool attrPerPos)
+{
+  if (attrPerPos) colorTableAddr = (colorTableAddr + (rowNamesAddr & 0xc00) + rowOffset) & VRAM_MASK;
+  return colorTableAddr;
+}
+
+/* Function:  tmsNextTilePage
+ * ----------------------------------------
+ * cross into the next horizontal scroll page. the name table just toggles its
+ * page bit, but the attribute address gained it by addition, so undo it the same way
+ */
+static inline void tmsNextTilePage(uint16_t* rowNamesAddr, uint16_t* colorTableAddr, const bool attrPerPos)
+{
+  *rowNamesAddr ^= 0x400;
+  if (attrPerPos) *colorTableAddr = (*colorTableAddr + ((*rowNamesAddr & 0x400) << 1) - 0x400) & VRAM_MASK;
+}
+
 /* Function:  vrEmuF18ATileScanLine
  * ----------------------------------------
  * generate an F18A tile layer scanline
@@ -1716,8 +1739,7 @@ static inline void __time_critical_func(vrEmuF18ATileScanLine)(VR_EMU_INST_ARG c
           {
             if (hpSize)
             {
-              rowNamesAddr ^= 0x400;
-              if (attrPerPos) colorTableAddr ^= 0x400;
+              tmsNextTilePage(&rowNamesAddr, &colorTableAddr, attrPerPos);
             }
             tileIndex = 0;
           }
@@ -1738,8 +1760,7 @@ static inline void __time_critical_func(vrEmuF18ATileScanLine)(VR_EMU_INST_ARG c
           {
             if (hpSize)
             {
-              rowNamesAddr ^= 0x400;
-              if (attrPerPos) colorTableAddr ^= 0x400;
+              tmsNextTilePage(&rowNamesAddr, &colorTableAddr, attrPerPos);
             }
             tileIndex = 0;
           }
@@ -1763,8 +1784,7 @@ static inline void __time_critical_func(vrEmuF18ATileScanLine)(VR_EMU_INST_ARG c
         {
           if (hpSize)
           {
-            rowNamesAddr ^= 0x400;
-            if (attrPerPos) colorTableAddr ^= 0x400;
+            tmsNextTilePage(&rowNamesAddr, &colorTableAddr, attrPerPos);
           }
           tileIndex = 0;
         }
@@ -1826,13 +1846,7 @@ static void __time_critical_func(vrEmuF18ATile1ScanLine)(VR_EMU_INST_ARG uint16_
   uint16_t rowNamesAddr = tmsNameTableAddr(tms9918) + rowOffset;
   if (swapYPage) rowNamesAddr ^= 0x800;
 
-  uint16_t colorTableAddr = tmsColorTableAddr(tms9918);
-  if (attrPerPos)
-  {
-    colorTableAddr = (colorTableAddr & ~0x400) | (rowNamesAddr & 0x400);
-    if (swapYPage) colorTableAddr ^= 0x800;
-    colorTableAddr += rowOffset;
-  }
+  const uint16_t colorTableAddr = tmsAttrTableAddr(tmsColorTableAddr(tms9918), rowNamesAddr, rowOffset, attrPerPos);
 
 
   const uint8_t pal = (TMS_REGISTER(tms9918, 0x18) & 0x03) << 4;
@@ -1878,13 +1892,7 @@ static void __time_critical_func(vrEmuF18ATile2ScanLine)(VR_EMU_INST_ARG uint16_
   uint16_t rowNamesAddr = tmsNameTable2Addr(tms9918) + rowOffset;
   if (swapYPage) rowNamesAddr ^= 0x800;
 
-  uint16_t colorTableAddr = tmsColorTable2Addr(tms9918);
-  if (attrPerPos)
-  {
-    colorTableAddr = (colorTableAddr & ~0x400) | (rowNamesAddr & 0x400);
-    if (swapYPage) colorTableAddr ^= 0x800;
-    colorTableAddr += rowOffset;
-  }
+  const uint16_t colorTableAddr = tmsAttrTableAddr(tmsColorTable2Addr(tms9918), rowNamesAddr, rowOffset, attrPerPos);
 
   const uint8_t pal = (TMS_REGISTER(tms9918, 0x18) & 0x0c) << 2;
   const uint8_t startPattBit = TMS_REGISTER(tms9918, 0x19) & 0x07;
