@@ -2036,8 +2036,9 @@ static bool __time_critical_func(vrEmuTms9918BitmapLayerScanLine)(VR_EMU_INST_AR
   if (y >= TMS_REGISTER(tms9918, 0x24))
     return true;
 
-  const uint8_t width = TMS_REGISTER(tms9918, 0x23) ? (TMS_REGISTER(tms9918, 0x23) >> 2) : 64;
-  const uint16_t addr = (TMS_REGISTER(tms9918, 0x20) << 6) + (y * width);
+  /* four pixels per byte, rounded up, so a row always starts on a byte boundary */
+  const uint8_t width = TMS_REGISTER(tms9918, 0x23) ? ((TMS_REGISTER(tms9918, 0x23) + 3) >> 2) : 64;
+  const uint16_t addr = ((TMS_REGISTER(tms9918, 0x20) << 6) + (y * width)) & 0x3FFF;
 
   //if (bmlCtl & 0x20) // transp
   {
