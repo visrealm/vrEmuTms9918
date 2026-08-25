@@ -216,16 +216,25 @@ inline void vrEmuTms9918WriteAddrImpl(VR_EMU_INST_ARG uint8_t data)
   }
 }
 
+/* Function:  vrEmuTms9918ResetAccessFlags
+ * ----------------------------------------
+ * reading any status register resets the address and palette write
+ * stages and returns the data port to vram
+ */
+inline void vrEmuTms9918ResetAccessFlagsImpl(VR_EMU_INST_ONLY_ARG)
+{
+  tms9918->regWriteStage = 0;
+  tms9918->palWriteStage = 0;
+  TMS_REGISTER(tms9918, 0x2f) &= 0x7f;
+}
+
 /* Function:  vrEmuTms9918ReadStatus
  * ----------------------------------------
  * read from the status register
  */
 inline uint8_t vrEmuTms9918ReadStatusImpl(VR_EMU_INST_ONLY_ARG)
 {
-  tms9918->regWriteStage = 0;
-  
-  tms9918->palWriteStage = 0;
-  TMS_REGISTER(tms9918, 0x2f) &= 0x7f; // reset data port palette mode
+  vrEmuTms9918ResetAccessFlagsImpl(VR_EMU_INST_ONLY);
 
   if ((TMS_REGISTER(tms9918, 0x0F) & 0x0F) == 0)
   {
@@ -236,6 +245,34 @@ inline uint8_t vrEmuTms9918ReadStatusImpl(VR_EMU_INST_ONLY_ARG)
   else
   {
     return TMS_STATUS(tms9918, TMS_REGISTER(tms9918, 0x0F) & 0x0F);
+  }
+}
+
+/* Function:  vrEmuTms9918StatusWasRead
+ * ----------------------------------------
+ * apply the side-effects of the host having read status register 'reg'
+ * and received 'value'. for hosts which latch the status value ahead of
+ * the read, so the value delivered is not necessarily the current one
+ *
+ * reg: status register the host read (0 when locked)
+ * value: the byte the host actually received
+ */
+inline void vrEmuTms9918StatusWasReadImpl(VR_EMU_INST_ARG uint8_t reg, uint8_t value)
+{
+  vrEmuTms9918ResetAccessFlagsImpl(VR_EMU_INST_ONLY);
+
+  if (reg == 0)
+  {
+    /* only clear the flags the host received. anything set since the
+       value was latched must survive to be reported next time */
+    value &= (STATUS_INT | STATUS_5S | STATUS_COL);
+    uint8_t status = TMS_STATUS(tms9918, 0) & ~value;
+    if (value & STATUS_5S) status |= 0x1f; /* sprite number back to 31 */
+    TMS_STATUS(tms9918, 0) = status;
+  }
+  else if (reg == 1)
+  {
+    TMS_STATUS(tms9918, 1) &= ~(value & 0x01);
   }
 }
 
